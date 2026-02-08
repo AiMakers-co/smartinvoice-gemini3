@@ -1,0 +1,48 @@
+# Firebase App Hosting configuration for Ormandy
+
+runConfig:
+  concurrency: 80
+  cpu: 1
+  memoryMiB: 512
+  minInstances: 0
+  maxInstances: 10
+
+env:
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    value: AIzaSyAiG0DMAgCn4wT8RK0iiIA989OHYOVsNBI
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: ormandy-7ed6c.firebaseapp.com
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: ormandy-7ed6c
+  - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    value: ormandy-7ed6c.firebasestorage.app
+  - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+    value: "111535698024"
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    value: 1:111535698024:web:80e4f3f7d6d6347d52cbdd
+  # Stripe Price IDs (created 2026-01-21)
+  - variable: NEXT_PUBLIC_STRIPE_PRICE_STARTER
+    value: price_1Srw7FKb66mh5lk8PIqn28WB
+  - variable: NEXT_PUBLIC_STRIPE_PRICE_PRO_MONTHLY
+    value: price_1Srw7GKb66mh5lk8R2NKRjBS
+  - variable: NEXT_PUBLIC_STRIPE_PRICE_PRO_YEARLY
+    value: price_1Srw7GKb66mh5lk8GYXsr03j
+  - variable: NEXT_PUBLIC_STRIPE_PRICE_TEAM_MONTHLY
+    value: price_1Srw7HKb66mh5lk8KHjh4j2R
+  - variable: NEXT_PUBLIC_STRIPE_PRICE_TEAM_YEARLY
+    value: price_1Srw7HKb66mh5lk87B3FQ5py
+  - variable: NEXT_PUBLIC_STRIPE_PRICE_BUSINESS_MONTHLY
+    value: price_1Srw7IKb66mh5lk8fRpYYhxt
+  - variable: NEXT_PUBLIC_STRIPE_PRICE_BUSINESS_YEARLY
+    value: price_1Srw7JKb66mh5lk8YXJbkfpY
+  # Stripe Meter ID for Pay-as-you-go usage reporting
+  - variable: STRIPE_METER_ID
+    value: mtr_61U1K4aVOKtPfLbUK41Kb66mh5lk85aa
+  # Gemini API Key for AI features (stored as Firebase secret)
+  - variable: GEMINI_API_KEY
+    secret: GEMINI_API_KEY
+  # Algolia Search
+  - variable: NEXT_PUBLIC_ALGOLIA_APP_ID
+    value: HPQCAAP6CP
+  - variable: NEXT_PUBLIC_ALGOLIA_SEARCH_KEY
+    value: e7c45285db8422567619a30d861bb091

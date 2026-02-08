@@ -1,0 +1,385 @@
+@import "tailwindcss";
+
+@theme inline {
+  /* ============================================
+   * ORMANDY BRAND COLORS
+   * ============================================ */
+  --color-ormandy-red: #E31B54;
+  --color-ormandy-red-dark: #C41848;
+  --color-ormandy-red-light: #F43F6E;
+  --color-ormandy-black: #1a1a1a;
+  --color-ormandy-slate: #1e293b;
+  --color-ormandy-gray: #64748b;
+  --color-ormandy-light: #f8fafc;
+  --color-ormandy-coral: #FBD5C4;
+  --color-ormandy-blue: #A3BFCF;
+  
+  /* ============================================
+   * SEMANTIC COLORS
+   * ============================================ */
+  --color-background: #ffffff;
+  --color-foreground: #1a1a1a;
+  --color-card: #ffffff;
+  --color-card-foreground: #1a1a1a;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #1a1a1a;
+  --color-primary: #E31B54;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #f1f5f9;
+  --color-secondary-foreground: #1e293b;
+  --color-muted: #f1f5f9;
+  --color-muted-foreground: #64748b;
+  --color-accent: #f1f5f9;
+  --color-accent-foreground: #1e293b;
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #ffffff;
+  --color-border: #e2e8f0;
+  --color-input: #e2e8f0;
+  --color-ring: #E31B54;
+  
+  /* ============================================
+   * SIDEBAR COLORS
+   * ============================================ */
+  --color-sidebar: #1e293b;
+  --color-sidebar-foreground: #f8fafc;
+  --color-sidebar-hover: #334155;
+  --color-sidebar-active: #E31B54;
+  
+  /* ============================================
+   * BORDER RADIUS
+   * Change these to adjust roundness globally
+   * ============================================ */
+  --radius-lg: 0.75rem;
+  --radius-md: 0.5rem;
+  --radius-sm: 0.25rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+  --radius-full: 9999px;
+  
+  /* ============================================
+   * SPACING SCALE (Design Tokens)
+   * These map to common UI patterns
+   * ============================================ */
+  --spacing-page: 1.5rem;        /* Page padding (p-6) */
+  --spacing-section: 1.5rem;     /* Gap between sections */
+  --spacing-card: 1rem;          /* Card internal padding (p-4) */
+  --spacing-card-header: 1.5rem; /* Card header padding (p-6) */
+  --spacing-list-item: 0.75rem;  /* List item padding (p-3) */
+  --spacing-list-gap: 0.5rem;    /* Gap between list items */
+  --spacing-grid: 1rem;          /* Grid gap (gap-4) */
+  --spacing-input: 0.5rem 0.75rem; /* Input padding */
+  --spacing-button: 0.5rem 1rem; /* Button padding */
+  
+  /* ============================================
+   * SHADOWS
+   * ============================================ */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-card: var(--shadow-sm);
+}
+
+/* ============================================
+ * DARK MODE
+ * ============================================ */
+.dark {
+  --color-background: #0f172a;
+  --color-foreground: #f8fafc;
+  --color-card: #1e293b;
+  --color-card-foreground: #f8fafc;
+  --color-popover: #1e293b;
+  --color-popover-foreground: #f8fafc;
+  --color-primary: #E31B54;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #334155;
+  --color-secondary-foreground: #f8fafc;
+  --color-muted: #334155;
+  --color-muted-foreground: #94a3b8;
+  --color-accent: #334155;
+  --color-accent-foreground: #f8fafc;
+  --color-border: #334155;
+  --color-input: #334155;
+  --color-sidebar: #0f172a;
+  --color-sidebar-hover: #1e293b;
+}
+
+/* ============================================
+ * THEME PRESETS
+ * Add one of these classes to <html> to change theme
+ * Example: <html class="theme-compact">
+ * ============================================ */
+
+/* COMPACT: Tighter spacing, smaller radius - good for data-heavy UIs */
+.theme-compact {
+  --spacing-page: 0.75rem;       /* 12px */
+  --spacing-section: 0.75rem;   /* 12px */
+  --spacing-card: 0.625rem;     /* 10px */
+  --spacing-card-header: 0.625rem;
+  --spacing-list-item: 0.5rem;  /* 8px */
+  --spacing-list-gap: 0.25rem;  /* 4px */
+  --spacing-grid: 0.625rem;     /* 10px */
+  --radius-lg: 0.375rem;        /* 6px - subtle rounding */
+  --radius-md: 0.25rem;         /* 4px */
+  --radius-sm: 0.125rem;        /* 2px */
+  --radius-xl: 0.5rem;          /* 8px */
+  --radius-2xl: 0.625rem;       /* 10px */
+  --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+}
+
+/* COMFORTABLE: More breathing room - good for consumer-facing UIs */
+.theme-comfortable {
+  --spacing-page: 2rem;
+  --spacing-section: 2rem;
+  --spacing-card: 1.5rem;
+  --spacing-card-header: 1.5rem;
+  --spacing-list-item: 1rem;
+  --spacing-list-gap: 0.75rem;
+  --spacing-grid: 1.5rem;
+  --radius-lg: 1rem;
+  --radius-md: 0.75rem;
+  --radius-sm: 0.5rem;
+  --radius-xl: 1.5rem;
+  --radius-2xl: 2rem;
+  --shadow-card: var(--shadow-md);
+}
+
+/* SHARP: No rounded corners - modern/minimal look */
+.theme-sharp {
+  --radius-lg: 0;
+  --radius-md: 0;
+  --radius-sm: 0;
+  --radius-xl: 0;
+  --radius-2xl: 0;
+  --radius-full: 0;
+  --shadow-card: none;
+}
+
+/* SOFT: Extra rounded corners - friendly look */
+.theme-soft {
+  --radius-lg: 1rem;
+  --radius-md: 0.75rem;
+  --radius-sm: 0.5rem;
+  --radius-xl: 1.5rem;
+  --radius-2xl: 2rem;
+  --shadow-card: var(--shadow-md);
+}
+
+/* ELEVATED: More prominent shadows */
+.theme-elevated {
+  --shadow-card: var(--shadow-lg);
+}
+
+/* FLAT: No shadows */
+.theme-flat {
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+  --shadow-card: none;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  
+  /* Override Tailwind's fixed spacing with theme-aware ones */
+  .p-4 { padding: var(--spacing-card) !important; }
+  .p-6 { padding: var(--spacing-page) !important; }
+  .px-4 { padding-left: var(--spacing-card) !important; padding-right: var(--spacing-card) !important; }
+  .px-6 { padding-left: var(--spacing-page) !important; padding-right: var(--spacing-page) !important; }
+  .py-4 { padding-top: var(--spacing-card) !important; padding-bottom: var(--spacing-card) !important; }
+  .py-6 { padding-top: var(--spacing-page) !important; padding-bottom: var(--spacing-page) !important; }
+  .gap-4 { gap: var(--spacing-grid) !important; }
+  .gap-6 { gap: var(--spacing-section) !important; }
+  .space-y-4 > * + * { margin-top: var(--spacing-grid) !important; }
+  .space-y-6 > * + * { margin-top: var(--spacing-section) !important; }
+  
+  /* Override Tailwind's fixed border-radius with theme-aware ones */
+  .rounded-lg { border-radius: var(--radius-lg) !important; }
+  .rounded-xl { border-radius: var(--radius-xl) !important; }
+  .rounded-2xl { border-radius: var(--radius-2xl) !important; }
+  .rounded-md { border-radius: var(--radius-md) !important; }
+}
+
+/* ============================================
+ * DESIGN SYSTEM UTILITY CLASSES
+ * Use these instead of hardcoded p-4, p-6, etc.
+ * They read from CSS variables for global theming
+ * ============================================ */
+
+@layer utilities {
+  /* Page Layout */
+  .page-padding {
+    padding: var(--spacing-page);
+  }
+  .page-padding-x {
+    padding-left: var(--spacing-page);
+    padding-right: var(--spacing-page);
+  }
+  .page-padding-y {
+    padding-top: var(--spacing-page);
+    padding-bottom: var(--spacing-page);
+  }
+  
+  /* Section Spacing */
+  .section-gap {
+    gap: var(--spacing-section);
+  }
+  .section-gap-y > * + * {
+    margin-top: var(--spacing-section);
+  }
+  
+  /* Card Styling */
+  .card-padding {
+    padding: var(--spacing-card);
+  }
+  .card-header-padding {
+    padding: var(--spacing-card-header);
+  }
+  .card-radius {
+    border-radius: var(--radius-lg);
+  }
+  .card-shadow {
+    box-shadow: var(--shadow-card);
+  }
+  
+  /* Grid */
+  .grid-gap {
+    gap: var(--spacing-grid);
+  }
+  .grid-gap-sm {
+    gap: calc(var(--spacing-grid) * 0.5);
+  }
+  .grid-gap-lg {
+    gap: calc(var(--spacing-grid) * 1.5);
+  }
+  
+  /* List Items */
+  .list-item-padding {
+    padding: var(--spacing-list-item);
+  }
+  .list-gap > * + * {
+    margin-top: var(--spacing-list-gap);
+  }
+  
+  /* Border Radius */
+  .radius-sm {
+    border-radius: var(--radius-sm);
+  }
+  .radius-md {
+    border-radius: var(--radius-md);
+  }
+  .radius-lg {
+    border-radius: var(--radius-lg);
+  }
+  .radius-xl {
+    border-radius: var(--radius-xl);
+  }
+  .radius-2xl {
+    border-radius: var(--radius-2xl);
+  }
+  .radius-full {
+    border-radius: var(--radius-full);
+  }
+  
+  /* Shadows */
+  .shadow-card {
+    box-shadow: var(--shadow-card);
+  }
+  .shadow-sm-var {
+    box-shadow: var(--shadow-sm);
+  }
+  .shadow-md-var {
+    box-shadow: var(--shadow-md);
+  }
+  .shadow-lg-var {
+    box-shadow: var(--shadow-lg);
+  }
+  
+  /* Typography */
+  .text-xs-var {
+    font-size: var(--font-size-xs);
+  }
+  .text-sm-var {
+    font-size: var(--font-size-sm);
+  }
+  .text-base-var {
+    font-size: var(--font-size-base);
+  }
+  .text-lg-var {
+    font-size: var(--font-size-lg);
+  }
+  .text-xl-var {
+    font-size: var(--font-size-xl);
+  }
+  .text-2xl-var {
+    font-size: var(--font-size-2xl);
+  }
+  .text-3xl-var {
+    font-size: var(--font-size-3xl);
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-muted-foreground);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-foreground);
+}
+
+/* Animations */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-in-from-left {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes slide-in-from-bottom {
+  from { transform: translateY(10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}
+
+.animate-slide-in {
+  animation: slide-in-from-bottom 0.3s ease-out;
+}
+
+/* Pixelated background pattern (Ormandy style) */
+.ormandy-bg {
+  background: 
+    linear-gradient(135deg, var(--color-ormandy-blue) 0%, transparent 50%),
+    linear-gradient(225deg, var(--color-ormandy-coral) 0%, transparent 50%),
+    linear-gradient(to bottom, #f0f4f8, #ffffff);
+  background-size: 100% 100%;
+}
+
+.ormandy-bg-dark {
+  background: 
+    linear-gradient(135deg, rgba(163, 191, 207, 0.1) 0%, transparent 50%),
+    linear-gradient(225deg, rgba(251, 213, 196, 0.1) 0%, transparent 50%),
+    var(--color-sidebar);
+}

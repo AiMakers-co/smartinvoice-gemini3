@@ -1,0 +1,18 @@
+{
+  "name": "Marcus Cole",
+  "title": "Elite Performance Coach & Fitness Specialist",
+  "tagline": "Faith. Strength. Discipline.",
+  "bio": "Marcus Cole is a certified elite performance coach with over 8 years of experience transforming clients through personalized strength and conditioning programs. Known for his intense yet supportive coaching style, Marcus combines cutting-edge training methodologies with a faith-centered approach to holistic wellness.\n\nHis signature \"MMVC Method\" (Mind, Muscle, Victory, Christ) integrates mental fortitude training with progressive overload techniques, helping clients achieve not just physical transformation but lasting lifestyle change.\n\nMarcus specializes in:\n• Hypertrophy & Muscle Building\n• Strength & Power Development  \n• Body Recomposition\n• Athletic Performance Enhancement\n• Competition Prep",
+  "certifications": [
+    "NASM Certified Personal Trainer",
+    "CSCS - Certified Strength & Conditioning Specialist",
+    "Precision Nutrition Level 2",
+    "TRX Suspension Training Certified"
+  ],
+  "philosophy": "I believe true strength comes from within. When you align your body, mind, and spirit, there's no limit to what you can achieve. Philippians 4:13.",
+  "stats": {
+    "clientsTransformed": "500+",
+    "yearsExperience": "8+",
+    "competitionsCoached": "50+"
+  }
+}

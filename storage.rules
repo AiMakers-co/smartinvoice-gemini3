@@ -1,0 +1,186 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Helper: Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper: Check if accessing demo user path
+    function isDemoPath(userId) {
+      return userId == 'demo_coastal_creative_agency';
+    }
+    
+    // Helper: Check if user owns the path OR is accessing demo path
+    function isOwner(userId) {
+      return isAuthenticated() && (request.auth.uid == userId || isDemoPath(userId));
+    }
+    
+    // Helper: Check file size (max 50MB)
+    function isValidSize() {
+      return request.resource.size < 50 * 1024 * 1024;
+    }
+    
+    // Helper: Check if file is a valid document type (PDF, image, CSV, Excel)
+    function isValidDocument() {
+      return request.resource.contentType.matches('application/pdf') ||
+             request.resource.contentType.matches('image/.*') ||
+             request.resource.contentType.matches('text/csv') ||
+             request.resource.contentType.matches('text/plain') ||
+             request.resource.contentType.matches('application/csv') ||
+             request.resource.contentType.matches('application/vnd.ms-excel') ||
+             request.resource.contentType.matches('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    }
+    
+    // Helper: Alias for backwards compatibility
+    function isValidStatement() {
+      return isValidDocument();
+    }
+
+    // ============================================
+    // TEMP - Temporary uploads for AI classification
+    // ============================================
+    
+    // Path: temp/{userId}/{filename}
+    match /temp/{userId}/{allPaths=**} {
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId) && isValidSize() && isValidDocument();
+      allow delete: if isOwner(userId);
+    }
+
+    // ============================================
+    // STATEMENTS - Bank statement uploads
+    // ============================================
+    
+    // Path: statements/{userId}/{statementId}/{filename}
+    match /statements/{userId}/{allPaths=**} {
+      // Users can read their own statements
+      allow read: if isOwner(userId);
+      
+      // Users can upload statements for themselves (PDF, image, or CSV)
+      allow write: if isOwner(userId) && isValidSize() && isValidStatement();
+      
+      // Users can delete their own statements
+      allow delete: if isOwner(userId);
+    }
+
+    // ============================================
+    // INVOICES - Invoice PDF uploads
+    // ============================================
+    
+    // Path: invoices/{userId}/{invoiceId}/{filename} or invoices/{userId}/temp/{filename}
+    match /invoices/{userId}/{allPaths=**} {
+      // Users can read their own invoices
+      allow read: if isOwner(userId);
+      
+      // Users can upload invoices for themselves
+      allow write: if isOwner(userId) && isValidSize() && isValidDocument();
+      
+      // Users can delete their own invoices
+      allow delete: if isOwner(userId);
+    }
+
+    // ============================================
+    // BILLS - Bill/expense PDF uploads
+    // ============================================
+    
+    // Path: bills/{userId}/{filename}
+    match /bills/{userId}/{allPaths=**} {
+      // Users can read their own bills
+      allow read: if isOwner(userId);
+      
+      // Users can upload bills for themselves
+      allow write: if isOwner(userId) && isValidSize() && isValidDocument();
+      
+      // Users can delete their own bills
+      allow delete: if isOwner(userId);
+    }
+
+    // ============================================
+    // TEMPLATES - Template sample images
+    // ============================================
+    
+    // Path: templates/{templateId}/{filename}
+    match /templates/{templateId}/{fileName} {
+      // Anyone authenticated can read template samples
+      allow read: if isAuthenticated();
+      
+      // Only authenticated users can upload template samples
+      allow write: if isAuthenticated() && 
+                    request.resource.contentType.matches('image/.*') &&
+                    request.resource.size < 10 * 1024 * 1024;
+      
+      // Only the template creator should delete (enforced at app level)
+      allow delete: if isAuthenticated();
+    }
+
+    // ============================================
+    // PDF2SHEET - PDF to spreadsheet uploads
+    // ============================================
+    
+    // Path: pdf2sheet/{userId}/{filename}
+    match /pdf2sheet/{userId}/{allPaths=**} {
+      // Users can read their own files
+      allow read: if isOwner(userId);
+      
+      // Users can upload PDFs for themselves
+      allow write: if isOwner(userId) && isValidSize() && isValidDocument();
+      
+      // Users can delete their own files
+      allow delete: if isOwner(userId);
+    }
+
+    // ============================================
+    // EXPORTS - Exported data files
+    // ============================================
+    
+    // Path: exports/{userId}/{filename}
+    match /exports/{userId}/{fileName} {
+      // Users can read their own exports
+      allow read: if isOwner(userId);
+      
+      // Cloud Functions create exports (users can't write directly)
+      allow write: if false;
+      
+      // Users can delete their own exports
+      allow delete: if isOwner(userId);
+    }
+
+    // ============================================
+    // ORGANIZATION ASSETS - Logos, etc.
+    // ============================================
+    
+    // Path: organizations/{orgId}/{filename}
+    match /organizations/{orgId}/{fileName} {
+      // Anyone in the org can read
+      allow read: if isAuthenticated();
+      
+      // Only admins can upload org assets (enforced at app level)
+      allow write: if isAuthenticated() && 
+                    request.resource.contentType.matches('image/.*') &&
+                    request.resource.size < 5 * 1024 * 1024;
+      
+      allow delete: if isAuthenticated();
+    }
+
+    // ============================================
+    // USER AVATARS
+    // ============================================
+    
+    // Path: avatars/{userId}/{filename}
+    match /avatars/{userId}/{fileName} {
+      // Anyone can read avatars (for display)
+      allow read: if true;
+      
+      // Users can upload their own avatar
+      allow write: if isOwner(userId) && 
+                    request.resource.contentType.matches('image/.*') &&
+                    request.resource.size < 2 * 1024 * 1024;
+      
+      // Users can delete their own avatar
+      allow delete: if isOwner(userId);
+    }
+  }
+}

@@ -1,0 +1,325 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ============================================
+    // HELPER FUNCTIONS
+    // ============================================
+    
+    // Demo user ID for sample data
+    function demoUserId() {
+      return "demo_coastal_creative_agency";
+    }
+    
+    // Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Check if user owns this resource
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Check if resource belongs to user
+    function belongsToUser() {
+      return isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+    
+    // Check if new resource will belong to user
+    function willBelongToUser() {
+      return isAuthenticated() && request.resource.data.userId == request.auth.uid;
+    }
+    
+    // Check if this is demo data (readable by any authenticated user)
+    function isDemoData() {
+      return resource.data.userId == demoUserId();
+    }
+    
+    // Check if new resource will be demo data (writable by any authenticated user)
+    function willBeDemoData() {
+      return isAuthenticated() && request.resource.data.userId == demoUserId();
+    }
+    
+    // Check if user can read (own data or demo data)
+    function canRead() {
+      return belongsToUser() || isDemoData();
+    }
+    
+    // Check if user can write (own data or demo data)
+    function canCreate() {
+      return willBelongToUser() || willBeDemoData();
+    }
+    
+    // Check if user can update/delete (own data or demo data)
+    function canModify() {
+      return belongsToUser() || isDemoData();
+    }
+    
+    // ============================================
+    // USER DOCUMENTS
+    // ============================================
+    
+    match /users/{userId} {
+      // Users can read/write their own user doc, or read the demo user doc
+      allow read: if isOwner(userId) || (isAuthenticated() && userId == demoUserId());
+      allow write: if isOwner(userId) || (isAuthenticated() && userId == demoUserId());
+      
+      // Invoices subcollection - read only (written by backend)
+      match /invoices/{invoiceId} {
+        allow read: if isOwner(userId);
+        allow write: if false; // Only backend can write invoices
+      }
+    }
+    
+    // ============================================
+    // BANK ACCOUNTS
+    // ============================================
+    
+    match /accounts/{accountId} {
+      allow read: if canRead();
+      allow create: if canCreate();
+      allow update, delete: if canModify();
+    }
+    
+    // ============================================
+    // STATEMENTS
+    // ============================================
+    
+    match /statements/{statementId} {
+      allow read: if canRead();
+      allow create: if canCreate();
+      allow update, delete: if canModify();
+    }
+    
+    // ============================================
+    // TRANSACTIONS
+    // ============================================
+    
+    match /transactions/{transactionId} {
+      allow read: if canRead();
+      allow create: if canCreate();
+      allow update, delete: if canModify();
+    }
+    
+    // ============================================
+    // INVOICES (document processing, not billing)
+    // ============================================
+    
+    match /invoices/{invoiceId} {
+      allow read: if canRead();
+      allow create: if canCreate();
+      allow update, delete: if canModify();
+    }
+    
+    // ============================================
+    // BILLS (payables - incoming invoices from vendors)
+    // ============================================
+    
+    match /bills/{billId} {
+      allow read: if canRead();
+      allow create: if canCreate();
+      allow update, delete: if canModify();
+    }
+    
+    match /invoice_line_items/{itemId} {
+      allow read: if canRead();
+      allow create: if canCreate();
+      allow update, delete: if canModify();
+    }
+    
+    match /invoice_templates/{templateId} {
+      allow read: if canRead();
+      allow create: if canCreate();
+      allow update, delete: if canModify();
+    }
+    
+    // ============================================
+    // USAGE TRACKING (read-only for users)
+    // ============================================
+    
+    match /usage_records/{recordId} {
+      allow read: if canRead();
+      allow write: if false; // Only backend can write
+    }
+    
+    match /daily_usage/{usageId} {
+      allow read: if isAuthenticated();
+      allow write: if false; // Only backend can write
+    }
+    
+    match /userStats/{userId} {
+      allow read: if isOwner(userId) || (isAuthenticated() && userId == demoUserId());
+      allow write: if false; // Only backend can write
+    }
+    
+    // ============================================
+    // PAYMENTS (read-only for users)
+    // ============================================
+    
+    match /payments/{paymentId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow write: if false; // Only backend can write
+    }
+    
+    // ============================================
+    // TEAM MEMBERS (if implemented later)
+    // ============================================
+    
+    match /team_members/{memberId} {
+      // Can read if you invited them or are the invited user
+      allow read: if isAuthenticated() && 
+        (resource.data.invitedBy == request.auth.uid || 
+         resource.data.userId == request.auth.uid);
+      // Only the inviter can create/modify
+      allow create: if isAuthenticated() && 
+        request.resource.data.invitedBy == request.auth.uid;
+      allow update, delete: if isAuthenticated() && 
+        resource.data.invitedBy == request.auth.uid;
+    }
+    
+    // ============================================
+    // ORGANIZATIONS (if implemented later)
+    // ============================================
+    
+    match /organizations/{orgId} {
+      // Members can read their org
+      allow read: if isAuthenticated();
+      // Only backend should create/modify orgs
+      allow write: if false;
+    }
+    
+    // ============================================
+    // DOCUMENTS (unified invoices/bills collection)
+    // ============================================
+    
+    match /documents/{documentId} {
+      allow read: if canRead();
+      allow create: if canCreate();
+      allow update, delete: if canModify();
+    }
+    
+    // ============================================
+    // IMPORT TEMPLATES (for CSV/Excel mapping)
+    // ============================================
+    
+    match /import_templates/{templateId} {
+      allow read: if belongsToUser() || isDemoData() || resource.data.isPublic == true;
+      allow create: if canCreate();
+      allow update, delete: if canModify();
+    }
+    
+    // ============================================
+    // IMPORT BATCHES (bulk import tracking)
+    // ============================================
+    
+    match /import_batches/{batchId} {
+      allow read: if canRead();
+      allow create: if canCreate();
+      allow update, delete: if canModify();
+    }
+    
+    // ============================================
+    // RECONCILIATION - AI MATCHING
+    // ============================================
+    
+    // Vendor patterns (learned AI patterns)
+    match /vendor_patterns/{patternId} {
+      allow read: if canRead();
+      allow write: if false; // Only backend can write
+    }
+    
+    // Match history (for AI learning)
+    match /match_history/{historyId} {
+      allow read: if canRead();
+      allow write: if false; // Only backend can write
+    }
+    
+    // AI Investigation results
+    match /reconciliation_investigations/{investigationId} {
+      allow read: if canRead();
+      allow write: if false; // Only backend can write
+    }
+    
+    // User rejections of AI suggestions
+    match /reconciliation_rejections/{rejectionId} {
+      allow read: if canRead();
+      allow write: if false; // Only backend can write
+    }
+    
+    // Confirmed matches
+    match /reconciliation_matches/{matchId} {
+      allow read: if canRead();
+      allow write: if false; // Only backend can write
+    }
+    
+    // Real-time reconciliation progress (streaming reasoning)
+    match /reconciliation_runs/{runId} {
+      allow read: if canRead();
+      allow write: if false; // Only backend can write
+    }
+    
+    // ============================================
+    // AI USAGE TRACKING
+    // ============================================
+    
+    match /ai_usage/{usageId} {
+      allow read: if canRead();
+      allow write: if false; // Only backend can write
+    }
+    
+    // ============================================
+    // FX RATE CACHE (read-only, backend managed)
+    // ============================================
+    
+    match /fx_cache/{cacheId} {
+      allow read: if isAuthenticated();
+      allow write: if false; // Only backend can write
+    }
+    
+    // ============================================
+    // CSV PARSING RULES (for smart CSV extraction)
+    // ============================================
+    
+    match /csv_parsing_rules/{rulesId} {
+      // Users can read their own rules or any confirmed rules
+      allow read: if isAuthenticated() && (
+        resource.data.createdBy == request.auth.uid || 
+        resource.data.confirmedAt != null
+      );
+      // Only backend can write (rules created via scanDocument, confirmed via confirmCSVParsingRules)
+      allow write: if false;
+    }
+    
+    // ============================================
+    // PDF TO SHEET
+    // ============================================
+    
+    // PDF2Sheet jobs (conversion history)
+    match /pdf2sheet_jobs/{jobId} {
+      allow read: if canRead();
+      allow create: if canCreate();
+      allow update, delete: if canModify();
+    }
+    
+    // PDF2Sheet templates (saved column configurations)
+    match /pdf2sheet_templates/{templateId} {
+      allow read: if canRead() || resource.data.isPublic == true;
+      allow create: if canCreate();
+      allow update, delete: if canModify();
+    }
+    
+    // ============================================
+    // SCAN ERRORS (debugging/logging)
+    // ============================================
+    
+    match /scan_errors/{errorId} {
+      allow read: if canRead();
+      // Users can create error logs
+      allow create: if canCreate();
+      // No updates or deletes - logs are immutable
+      allow update, delete: if false;
+    }
+  }
+}
