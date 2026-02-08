@@ -47,13 +47,22 @@ interface Pdf2SheetHeader {
   example?: string;
 }
 
+interface DocumentMetadataItem {
+  label: string;
+  value: string;
+  category: "entity" | "reference" | "date" | "financial" | "payment" | "tax" | "contact" | "other";
+}
+
 interface ScanResult {
   headers: Pdf2SheetHeader[];
   sampleRows: Record<string, any>[];
   documentType: string;
+  metadata?: DocumentMetadataItem[];
+  // Backward-compat convenience fields
   supplierName?: string;
   documentDate?: string;
   documentNumber?: string;
+  currency?: string;
   pageCount: number;
   confidence: number;
   isExtractable?: boolean;
@@ -243,6 +252,35 @@ export const Pdf2SheetTool = memo(function Pdf2SheetTool({
   const [editingHeader, setEditingHeader] = useState<number | null>(null);
   const [showSample, setShowSample] = useState(true);
 
+  // Currency formatting helper
+  const getCurrencySymbol = (code?: string): string => {
+    if (!code) return "";
+    const symbols: Record<string, string> = {
+      USD: "$", EUR: "€", GBP: "£", JPY: "¥", ANG: "ƒ", AED: "د.إ",
+      CHF: "CHF", CAD: "C$", AUD: "A$", NZD: "NZ$", SEK: "kr", NOK: "kr",
+      DKK: "kr", PLN: "zł", BRL: "R$", MXN: "$", INR: "₹", CNY: "¥",
+      KRW: "₩", SGD: "S$", HKD: "HK$", THB: "฿", ZAR: "R", RUB: "₽",
+      TRY: "₺", ILS: "₪", CZK: "Kč", HUF: "Ft", RON: "lei",
+    };
+    return symbols[code.toUpperCase()] || code;
+  };
+
+  const formatCellValue = (value: any, header: Pdf2SheetHeader, currencyCode?: string): string => {
+    if (value === null || value === undefined || value === "" || value === "-") return "—";
+    if (header.type === "currency") {
+      const num = typeof value === "number" ? value : parseFloat(String(value));
+      if (isNaN(num)) return String(value);
+      const symbol = getCurrencySymbol(currencyCode);
+      return `${symbol}${num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+    if (header.type === "number") {
+      const num = typeof value === "number" ? value : parseFloat(String(value));
+      if (isNaN(num)) return String(value);
+      return num.toLocaleString();
+    }
+    return String(value);
+  };
+
   // Helpers
   const startTimer = () => {
     startTimeRef.current = Date.now();
@@ -341,14 +379,29 @@ export const Pdf2SheetTool = memo(function Pdf2SheetTool({
       await addLineDelayed(`Classified as: ${docTypeLabel}`, "confirm", 150);
       await addLineDelayed(`Confidence: ${Math.round(data.confidence * 100)}%`, "confirm", 100);
 
-      if (data.supplierName) {
-        await addLineDelayed(`Supplier detected: ${data.supplierName}`, "match", 120);
-      }
-      if (data.documentDate) {
-        await addLineDelayed(`Document date: ${data.documentDate}`, "match", 80);
-      }
-      if (data.documentNumber) {
-        await addLineDelayed(`Document reference: ${data.documentNumber}`, "match", 80);
+      // Dynamic metadata reveal
+      const metadataItems = data.metadata || [];
+      if (metadataItems.length > 0) {
+        await addLineDelayed("DOCUMENT METADATA", "step", 200);
+        await addLineDelayed(`Found ${metadataItems.length} key fields on document:`, "analyze", 120);
+        for (const item of metadataItems) {
+          const categoryIcon: Record<string, string> = {
+            entity: "🏢", reference: "🔗", date: "📅", financial: "💰",
+            payment: "🏦", tax: "📋", contact: "📍", other: "📎",
+          };
+          const icon = categoryIcon[item.category] || "📎";
+          await addLineDelayed(
+            `${icon} ${item.label}: ${item.value}`,
+            "match",
+            40 + Math.random() * 40
+          );
+        }
+      } else {
+        // Fallback to legacy fields if metadata array is empty
+        if (data.supplierName) await addLineDelayed(`Supplier: ${data.supplierName}`, "match", 120);
+        if (data.documentDate) await addLineDelayed(`Date: ${data.documentDate}`, "match", 80);
+        if (data.documentNumber) await addLineDelayed(`Reference: ${data.documentNumber}`, "match", 80);
+        if (data.currency) await addLineDelayed(`Currency: ${data.currency}`, "match", 80);
       }
 
       await addLineDelayed(`Pages to process: ${data.pageCount}`, "search", 100);
@@ -457,6 +510,10 @@ export const Pdf2SheetTool = memo(function Pdf2SheetTool({
     addLine("FULL DATA EXTRACTION", "step");
     addLine(`Target: ${pagesToProcess} page${pagesToProcess > 1 ? "s" : ""} × ${headers.length} columns`, "analyze");
     addLine(`Schema: ${headers.map(h => h.name).join(", ")}`, "search");
+    const detectedCurrency = scanResult?.currency;
+    if (detectedCurrency) {
+      addLine(`Currency: ${detectedCurrency} (${getCurrencySymbol(detectedCurrency)})`, "search");
+    }
     addLine("Engine: Gemini 3 Flash • Output: structured JSON", "search");
 
     try {
@@ -477,6 +534,7 @@ export const Pdf2SheetTool = memo(function Pdf2SheetTool({
           pageNumber: page,
           totalPages: pagesToProcess,
           headers,
+          currency: scanResult?.currency || undefined,
         });
 
         const pageData = result.data as ExtractResult;
@@ -522,9 +580,11 @@ export const Pdf2SheetTool = memo(function Pdf2SheetTool({
             rowCount: allRows.length,
             status: "completed",
             documentType: scanResult?.documentType || "unknown",
+            metadata: scanResult?.metadata || [],
             supplierName: scanResult?.supplierName || null,
             documentDate: scanResult?.documentDate || null,
             documentNumber: scanResult?.documentNumber || null,
+            currency: scanResult?.currency || null,
             headers: headers.map(h => ({ name: h.name, type: h.type, description: h.description, example: h.example })),
             extractedData: allRows.slice(0, 100),
             createdAt: serverTimestamp(),
@@ -747,24 +807,57 @@ export const Pdf2SheetTool = memo(function Pdf2SheetTool({
             />
           )}
 
-          {/* Summary */}
-          <div className="flex items-center gap-3 p-4 bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-xl">
-            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-purple-200">
-              <CheckCircle2 className="h-5 w-5 text-white" />
+          {/* Summary + Metadata */}
+          <div className="rounded-xl border border-purple-200 overflow-hidden">
+            <div className="flex items-center gap-3 p-4 bg-gradient-to-r from-purple-50 to-indigo-50">
+              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-purple-200">
+                <CheckCircle2 className="h-5 w-5 text-white" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-semibold text-slate-900 text-sm">
+                  {scanResult.documentType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
+                  {scanResult.supplierName && ` — ${scanResult.supplierName}`}
+                </h3>
+                <p className="text-xs text-slate-600">
+                  {headers.length} columns • {totalPages} pages • {Math.round(scanResult.confidence * 100)}% confidence
+                  {scanResult.currency && ` • ${scanResult.currency}`}
+                </p>
+              </div>
+              <Badge className="bg-purple-100 text-purple-700 text-[10px]">
+                <Brain className="h-3 w-3 mr-1" />
+                AI Detected
+              </Badge>
             </div>
-            <div className="flex-1">
-              <h3 className="font-semibold text-slate-900 text-sm">
-                {scanResult.documentType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
-                {scanResult.supplierName && ` — ${scanResult.supplierName}`}
-              </h3>
-              <p className="text-xs text-slate-600">
-                {headers.length} columns • {totalPages} pages • {Math.round(scanResult.confidence * 100)}% confidence
-              </p>
-            </div>
-            <Badge className="bg-purple-100 text-purple-700 text-[10px]">
-              <Brain className="h-3 w-3 mr-1" />
-              AI Detected
-            </Badge>
+
+            {/* Dynamic metadata pills */}
+            {(scanResult.metadata && scanResult.metadata.length > 0) && (
+              <div className="px-4 py-3 border-t border-purple-100 bg-white">
+                <div className="flex flex-wrap gap-2">
+                  {scanResult.metadata.map((item, idx) => {
+                    const categoryColors: Record<string, string> = {
+                      entity: "bg-blue-50 text-blue-700 border-blue-200",
+                      reference: "bg-slate-50 text-slate-700 border-slate-200",
+                      date: "bg-amber-50 text-amber-700 border-amber-200",
+                      financial: "bg-emerald-50 text-emerald-700 border-emerald-200",
+                      payment: "bg-indigo-50 text-indigo-700 border-indigo-200",
+                      tax: "bg-orange-50 text-orange-700 border-orange-200",
+                      contact: "bg-purple-50 text-purple-700 border-purple-200",
+                      other: "bg-slate-50 text-slate-600 border-slate-200",
+                    };
+                    const colors = categoryColors[item.category] || categoryColors.other;
+                    return (
+                      <span
+                        key={idx}
+                        className={cn("inline-flex items-center gap-1 px-2 py-1 rounded-md border text-[10px]", colors)}
+                      >
+                        <span className="font-medium">{item.label}:</span>
+                        <span className="truncate max-w-[200px]">{item.value}</span>
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Headers Editor */}
@@ -853,7 +946,12 @@ export const Pdf2SheetTool = memo(function Pdf2SheetTool({
                       {scanResult.sampleRows.slice(0, 5).map((row, i) => (
                         <tr key={i} className="border-t hover:bg-slate-50/50">
                           {headers.map((h, j) => (
-                            <td key={j} className="px-3 py-2 text-slate-700 whitespace-nowrap">{row[h.name] ?? "-"}</td>
+                            <td key={j} className={cn(
+                              "px-3 py-2 whitespace-nowrap",
+                              h.type === "currency" ? "text-slate-900 font-medium tabular-nums" : "text-slate-700"
+                            )}>
+                              {formatCellValue(row[h.name], h, scanResult.currency)}
+                            </td>
                           ))}
                         </tr>
                       ))}
@@ -921,6 +1019,11 @@ export const Pdf2SheetTool = memo(function Pdf2SheetTool({
                 {extractedData.length} rows from {totalPages} pages in {(elapsedMs / 1000).toFixed(1)}s
               </p>
             </div>
+            {scanResult?.currency && (
+              <Badge className="bg-emerald-100 text-emerald-700 text-[10px]">
+                {getCurrencySymbol(scanResult.currency)} {scanResult.currency}
+              </Badge>
+            )}
           </div>
 
           {/* Data Preview */}
@@ -936,7 +1039,12 @@ export const Pdf2SheetTool = memo(function Pdf2SheetTool({
                   <tr>
                     <th className="px-3 py-2 text-left font-medium text-slate-400 w-10">#</th>
                     {headers.map((h, i) => (
-                      <th key={i} className="px-3 py-2 text-left font-medium text-slate-600 whitespace-nowrap">{h.name}</th>
+                      <th key={i} className="px-3 py-2 text-left font-medium text-slate-600 whitespace-nowrap">
+                        {h.name}
+                        {h.type === "currency" && scanResult?.currency && (
+                          <span className="ml-1 text-[10px] text-slate-400 font-normal">({scanResult.currency})</span>
+                        )}
+                      </th>
                     ))}
                   </tr>
                 </thead>
@@ -945,7 +1053,12 @@ export const Pdf2SheetTool = memo(function Pdf2SheetTool({
                     <tr key={i} className="border-t hover:bg-slate-50/50">
                       <td className="px-3 py-2 text-slate-400 text-[10px]">{i + 1}</td>
                       {headers.map((h, j) => (
-                        <td key={j} className="px-3 py-2 text-slate-700 whitespace-nowrap">{row[h.name] ?? "-"}</td>
+                        <td key={j} className={cn(
+                          "px-3 py-2 whitespace-nowrap",
+                          h.type === "currency" ? "text-slate-900 font-medium tabular-nums" : "text-slate-700"
+                        )}>
+                          {formatCellValue(row[h.name], h, scanResult?.currency)}
+                        </td>
                       ))}
                     </tr>
                   ))}

@@ -1,6 +1,7 @@
 /**
  * Public Demo API for Smart Data Extractor
- * Extracts rich metadata + tabular data from any document
+ * Extracts dynamic metadata + tabular data from any document
+ * Uses the same dynamic metadata approach as the authenticated Cloud Function
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -67,112 +68,62 @@ export async function POST(request: NextRequest) {
 
     const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
-    // Comprehensive scan prompt
-    const scanPrompt = `You are an expert document analyzer. Analyze this document and extract ALL available information.
+    // Dynamic metadata prompt — same philosophy as the authenticated Cloud Function
+    const scanPrompt = `You are an expert document analyzer. Analyze this document and extract:
+1. ALL key metadata/information present on the document
+2. Tabular data that can be extracted into a spreadsheet
 
-FIRST, determine the document type, then extract the appropriate metadata.
+METADATA EXTRACTION (critical — extract EVERY piece of key information you find):
+Scan the ENTIRE visible document for metadata. This is DYNAMIC — different documents have different info.
 
-=== FOR BANK STATEMENTS ===
-Extract:
-- bankName: Full bank name (e.g., "Chase Bank", "Bank of America", "HSBC")
-- bankCountry: Country code (e.g., "US", "UK", "NL")
-- accountNumber: Full account number (mask middle digits for privacy display)
-- accountHolderName: Account holder's name
-- accountType: "checking" | "savings" | "credit" | "investment"
-- currency: Currency code (USD, EUR, GBP, etc.)
-- periodStart: Statement start date (YYYY-MM-DD)
-- periodEnd: Statement end date (YYYY-MM-DD)
-- openingBalance: Opening balance (number)
-- closingBalance: Closing balance (number)
-- totalCredits: Sum of all credits/deposits (number)
-- totalDebits: Sum of all debits/withdrawals (number)
-- transactionCount: Total number of transactions
+Examples of what to look for (include ALL that are present, skip what's not):
+- Entity names: supplier/vendor name, customer/recipient name, bank name, merchant name, account holder
+- References: invoice number, PO number, receipt number, account number, statement number
+- Dates: document date, invoice date, due date, period start, period end, receipt date
+- Financial: currency (ISO code), subtotal, total amount, tax/VAT amount, tax rate, discount, opening balance, closing balance, total credits, total debits
+- Payment info: IBAN, BIC/SWIFT, bank name, payment terms, payment method
+- Tax: VAT/tax number, tax registration, KVK number
+- Contact: address, city, country, phone, email, website
+- Other: any other clearly important info visible on the document
 
-=== FOR INVOICES/BILLS ===
-Extract:
-- supplierName: Company name issuing the invoice
-- supplierAddress: Supplier's address
-- customerName: Customer/recipient name
-- invoiceNumber: Invoice/bill number
-- invoiceDate: Invoice date (YYYY-MM-DD)
-- dueDate: Payment due date (YYYY-MM-DD)
-- subtotal: Subtotal before tax (number)
-- taxAmount: Tax amount (number)
-- totalAmount: Total amount due (number)
-- currency: Currency code
-- paymentTerms: Payment terms (e.g., "Net 30")
+Each metadata item must have:
+- "label": Human-readable name (e.g., "Supplier", "Invoice Number", "Currency", "Total Amount")
+- "value": The extracted value as a string (for numbers, still use string like "2258.08")
+- "category": One of "entity", "reference", "date", "financial", "payment", "tax", "contact", "other"
 
-=== FOR RECEIPTS ===
-Extract:
-- merchantName: Store/merchant name
-- merchantAddress: Store address
-- receiptDate: Receipt date (YYYY-MM-DD)
-- receiptNumber: Receipt/transaction number
-- totalAmount: Total amount (number)
-- currency: Currency code
-- paymentMethod: Payment method used
+TABLE EXTRACTION:
+Also extract the tabular/repeated data into headers + rows.
 
-=== FOR ALL DOCUMENTS ===
-Also extract:
-- documentType: "Bank Statement" | "Invoice" | "Bill" | "Receipt" | "Credit Card Statement" | "Financial Report" | "Purchase Order" | "Expense Report" | "Other"
-- pageCount: Number of pages
-- confidence: 0.0-1.0 confidence score
-- headers: Array of column headers for the tabular data
-- rows: First 7 rows of ACTUAL DATA from the document. Each row is an object with header names as keys and the actual cell values.
-- totalRowCount: Estimated total rows in document
-- isExtractable: true if document has tabular data
-
-IMPORTANT: The "rows" array must contain the actual extracted data values, not empty objects!
+For each header:
+- name: Clean column name (e.g., "Date", "Description", "Amount")
+- type: One of "string", "number", "date", "currency", "boolean"
+- description: Brief description
+- example: An example value
 
 Return ONLY valid JSON:
 {
-  "documentType": "string",
-  "pageCount": number,
-  "confidence": number,
-  "isExtractable": boolean,
-  
-  "bankName": "string or null",
-  "bankCountry": "string or null",
-  "accountNumber": "string or null",
-  "accountHolderName": "string or null",
-  "accountType": "string or null",
-  "currency": "string or null",
-  "periodStart": "string or null",
-  "periodEnd": "string or null",
-  "openingBalance": number or null,
-  "closingBalance": number or null,
-  "totalCredits": number or null,
-  "totalDebits": number or null,
-  "transactionCount": number or null,
-  
-  "supplierName": "string or null",
-  "supplierAddress": "string or null",
-  "customerName": "string or null",
-  "invoiceNumber": "string or null",
-  "invoiceDate": "string or null",
-  "dueDate": "string or null",
-  "subtotal": number or null,
-  "taxAmount": number or null,
-  "totalAmount": number or null,
-  "paymentTerms": "string or null",
-  
-  "merchantName": "string or null",
-  "merchantAddress": "string or null",
-  "receiptDate": "string or null",
-  "receiptNumber": "string or null",
-  "paymentMethod": "string or null",
-  
+  "documentType": "string (e.g., 'Bank Statement', 'Invoice', 'Bill', 'Receipt', 'Report', 'Other')",
+  "metadata": [
+    { "label": "string", "value": "string", "category": "entity|reference|date|financial|payment|tax|contact|other" }
+  ],
   "headers": [
-    { "name": "Date", "type": "date", "example": "2024-01-15" },
-    { "name": "Description", "type": "string", "example": "Payment received" },
-    { "name": "Amount", "type": "currency", "example": "-150.00" }
+    { "name": "string", "type": "string|number|date|currency|boolean", "description": "string", "example": "string" }
   ],
   "rows": [
-    { "Date": "2024-01-15", "Description": "Payment received", "Amount": 500.00 },
-    { "Date": "2024-01-16", "Description": "Transfer out", "Amount": -150.00 }
+    { "ColumnName": "value" }
   ],
-  "totalRowCount": 25
-}`;
+  "pageCount": number,
+  "confidence": number (0-1),
+  "isExtractable": boolean,
+  "warnings": ["string"]
+}
+
+IMPORTANT:
+- The metadata array must contain EVERY key piece of info found — be thorough
+- For currency in metadata, use the 3-letter ISO 4217 code (e.g., "EUR" not "€")
+- The "rows" array must contain ACTUAL extracted data (first 7-10 rows), not placeholders
+- For dashes in amount columns, use null
+- ALWAYS return valid JSON`;
 
     const scanResponse = await model.generateContent({
       contents: [{
@@ -209,61 +160,57 @@ Return ONLY valid JSON:
         success: false,
         error: "This document doesn't contain extractable tabular data.",
         documentType: scanResult.documentType,
+        metadata: scanResult.metadata || [],
         remaining,
       });
     }
 
-    // Use rows from scan result (single API call - no second extraction needed for demo)
+    // Validate metadata
+    const validCategories = new Set(["entity", "reference", "date", "financial", "payment", "tax", "contact", "other"]);
+    const metadata = (scanResult.metadata || [])
+      .filter((m: any) => m && m.label && m.value)
+      .map((m: any) => ({
+        label: String(m.label),
+        value: String(m.value),
+        category: validCategories.has(m.category) ? m.category : "other",
+      }));
+
+    // Derive convenience fields from metadata for backward compat
+    const findMeta = (labels: string[]): string | null => {
+      const lower = labels.map(l => l.toLowerCase());
+      const item = metadata.find((m: any) => lower.some((l: string) => m.label.toLowerCase().includes(l)));
+      return item?.value || null;
+    };
+
     const rows = scanResult.rows || [];
 
-    // Return rich response
     return NextResponse.json({
       success: true,
       
-      // Document metadata
+      // Dynamic metadata
+      metadata,
+      
+      // Document classification
       documentType: scanResult.documentType,
       confidence: scanResult.confidence,
       pageCount: scanResult.pageCount || 1,
       
-      // Bank statement fields
-      bankName: scanResult.bankName,
-      bankCountry: scanResult.bankCountry,
-      accountNumber: scanResult.accountNumber,
-      accountHolderName: scanResult.accountHolderName,
-      accountType: scanResult.accountType,
-      currency: scanResult.currency,
-      periodStart: scanResult.periodStart,
-      periodEnd: scanResult.periodEnd,
-      openingBalance: scanResult.openingBalance,
-      closingBalance: scanResult.closingBalance,
-      totalCredits: scanResult.totalCredits,
-      totalDebits: scanResult.totalDebits,
-      transactionCount: scanResult.transactionCount,
+      // Backward-compat convenience fields (derived from metadata)
+      currency: findMeta(["currency"]),
+      supplierName: findMeta(["supplier", "vendor"]),
+      bankName: findMeta(["bank name"]),
+      totalAmount: (() => {
+        const v = findMeta(["total amount", "total"]);
+        return v ? parseFloat(v) : null;
+      })(),
       
-      // Invoice/Bill fields
-      supplierName: scanResult.supplierName,
-      supplierAddress: scanResult.supplierAddress,
-      customerName: scanResult.customerName,
-      invoiceNumber: scanResult.invoiceNumber,
-      invoiceDate: scanResult.invoiceDate,
-      dueDate: scanResult.dueDate,
-      subtotal: scanResult.subtotal,
-      taxAmount: scanResult.taxAmount,
-      totalAmount: scanResult.totalAmount,
-      paymentTerms: scanResult.paymentTerms,
-      
-      // Receipt fields
-      merchantName: scanResult.merchantName,
-      merchantAddress: scanResult.merchantAddress,
-      receiptDate: scanResult.receiptDate,
-      receiptNumber: scanResult.receiptNumber,
-      paymentMethod: scanResult.paymentMethod,
-      
-      // Table data (first 7 rows from single API call)
+      // Table data
       headers: scanResult.headers,
-      rows: rows,
+      rows,
       rowCount: rows.length,
-      totalRowCount: scanResult.totalRowCount || rows.length,
+      
+      // Warnings
+      warnings: scanResult.warnings || [],
       
       remaining,
     });

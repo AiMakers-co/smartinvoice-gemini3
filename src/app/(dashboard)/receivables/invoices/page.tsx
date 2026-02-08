@@ -33,7 +33,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   FileCheck,
-  Upload,
   Search,
   MoreHorizontal,
   Eye,
@@ -48,7 +47,7 @@ import {
 } from "lucide-react";
 import { OutgoingInvoice } from "@/types/documents";
 import { Header } from "@/components/layout/header";
-import { UploadDrawer } from "@/components/upload/upload-drawer";
+import { useUploadState } from "@/hooks/use-upload-state";
 
 // ============================================
 // HELPERS
@@ -175,8 +174,8 @@ export default function ReceivablesInvoicesPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [sortBy, setSortBy] = useState<string>("date-desc");
   
-  // Upload modal state
-  const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  // Upload
+  const { openDrawer: openUploadDrawer } = useUploadState();
   
   // Migration state
   const [migrating, setMigrating] = useState(false);
@@ -324,7 +323,7 @@ export default function ReceivablesInvoicesPage() {
             <p className="text-xs text-slate-500">{invoices.length} invoice{invoices.length !== 1 ? 's' : ''} uploaded</p>
           </div>
           <Button 
-            onClick={() => setUploadModalOpen(true)}
+            onClick={() => openUploadDrawer("invoice")}
             className="bg-emerald-600 hover:bg-emerald-700"
           >
             <Plus className="h-4 w-4 mr-2" />
@@ -553,15 +552,6 @@ export default function ReceivablesInvoicesPage() {
         )}
       </div>
 
-      {/* Upload Drawer */}
-      <UploadDrawer
-        open={uploadModalOpen}
-        onOpenChange={setUploadModalOpen}
-        defaultType="invoice"
-        onUploadComplete={() => {
-          // Drawer handles its own close timing
-        }}
-      />
     </>
   );
 }

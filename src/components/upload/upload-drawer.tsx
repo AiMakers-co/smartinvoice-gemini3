@@ -37,6 +37,9 @@ import {
   Zap,
   FileSearch,
   DollarSign,
+  ShieldAlert,
+  Ban,
+  RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
@@ -50,7 +53,7 @@ import { toast } from "sonner";
 // ============================================
 
 export type DocumentType = "statement" | "invoice" | "bill";
-type DrawerStep = "upload" | "identifying" | "confirm_type" | "extracting" | "preview" | "complete";
+type DrawerStep = "upload" | "identifying" | "confirm_type" | "extracting" | "saving" | "preview" | "complete";
 
 interface IdentifyResult {
   detectedType: "bank_statement" | "invoice" | "bill" | "receipt" | "vendor_list" | "invoice_list" | "payment_record" | "other";
@@ -60,6 +63,8 @@ interface IdentifyResult {
   detectedCustomer?: string;
   currency?: string;
   pageCount?: number;
+  invoiceFrom?: string;   // Company that issued the document
+  invoiceTo?: string;     // Company that received / must pay
   reasoning: string;
   suggestions: string[];
   inputTokens: number;
@@ -133,10 +138,7 @@ interface ExtractedData {
 }
 
 interface UploadDrawerProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
   defaultType?: DocumentType;
-  onUploadComplete?: () => void;
 }
 
 // ============================================
@@ -159,13 +161,13 @@ const TYPE_CONFIG: Record<DocumentType, {
 }> = {
   statement: {
     label: "Bank Statement",
-    title: "Upload Bank Statements",
-    subtitle: "Import your bank statements",
-    description: "Upload PDF or image bank statements and we'll automatically extract all transactions, dates, and balances.",
+    title: "Upload Documents",
+    subtitle: "Drop anything — our AI will figure it out",
+    description: "Upload statements, invoices, bills, or receipts. AI automatically identifies the document type and extracts the right data.",
     features: [
-      "Extracts all transactions automatically",
-      "Detects account numbers & bank details",
-      "Supports multi-page statements",
+      "AI identifies document type automatically",
+      "Extracts transactions, line items & totals",
+      "Supports statements, invoices, bills & more",
     ],
     icon: Building2,
     tagVariant: "cyan",
@@ -352,7 +354,7 @@ function AIThinkingTerminal({
   if (lines.length === 0) return null;
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden mb-4">
+    <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden flex flex-col flex-1 min-h-0">
       {/* Terminal header */}
       <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-200">
         <div className="flex items-center gap-3">
@@ -363,7 +365,7 @@ function AIThinkingTerminal({
           </div>
           <div className="flex items-center gap-2">
             <Terminal className="h-3.5 w-3.5 text-slate-400" />
-            <span className="text-xs font-mono text-slate-500">Gemini 3 Flash — Document Analysis</span>
+            <span className="text-xs font-mono text-slate-500">Gemini 3 Pro — Document Analysis</span>
             {isRunning && (
               <span className="flex items-center gap-1">
                 <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -378,12 +380,12 @@ function AIThinkingTerminal({
       {/* Terminal body */}
       <div
         ref={scrollRef}
-        className="p-4 font-mono text-[11px] leading-[1.6] max-h-[280px] overflow-y-auto scroll-smooth"
+        className="p-4 font-mono text-[11px] leading-[1.6] flex-1 min-h-0 overflow-y-auto scroll-smooth"
         style={{ scrollbarWidth: "thin", scrollbarColor: "#cbd5e1 transparent" }}
       >
         {/* Init line */}
         <div className="text-slate-400 mb-2">
-          <span className="text-cyan-600">$</span> smartinvoice scan {fileName} --engine=gemini-3-flash
+          <span className="text-cyan-600">$</span> smartinvoice scan {fileName} --engine=gemini-3-pro
         </div>
 
         {/* Thinking lines */}
@@ -416,14 +418,208 @@ function AIThinkingTerminal({
 }
 
 // ============================================
+// FILE QUEUE PANEL
+// ============================================
+
+function FileQueuePanel({ fileStates, currentIndex }: { fileStates: ContextFileUploadState[]; currentIndex?: number }) {
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+
+  if (fileStates.length <= 1) return null;
+
+  const getTypeLabel = (detectedType?: string): { label: string; color: string; bg: string; border: string } => {
+    switch (detectedType) {
+      case "bank_statement": case "statement": return { label: "Statement", color: "text-blue-700", bg: "bg-blue-50", border: "border-blue-200" };
+      case "invoice": return { label: "Invoice (A/R)", color: "text-purple-700", bg: "bg-purple-50", border: "border-purple-200" };
+      case "bill": return { label: "Bill (A/P)", color: "text-amber-700", bg: "bg-amber-50", border: "border-amber-200" };
+      case "receipt": case "payment_record": return { label: "Receipt", color: "text-emerald-700", bg: "bg-emerald-50", border: "border-emerald-200" };
+      case "expense_report": return { label: "Expense", color: "text-pink-700", bg: "bg-pink-50", border: "border-pink-200" };
+      default: return { label: "Document", color: "text-slate-600", bg: "bg-slate-50", border: "border-slate-200" };
+    }
+  };
+
+  const getStatusInfo = (status: string, detectedType?: string) => {
+    const typeInfo = getTypeLabel(detectedType);
+    switch (status) {
+      case "pending": return { icon: FileText, color: "text-slate-400", bg: "bg-slate-50", label: "Queued" };
+      case "uploading": return { icon: Upload, color: "text-blue-500", bg: "bg-blue-50", label: "Uploading..." };
+      case "identifying": return { icon: Loader2, color: "text-cyan-600", bg: "bg-cyan-50", label: "Identifying...", spin: true };
+      case "type_confirmed": return { icon: Check, color: "text-emerald-600", bg: "bg-emerald-50", label: typeInfo.label };
+      case "extracting": return { icon: Loader2, color: "text-blue-600", bg: "bg-blue-50", label: `Extracting...`, spin: true };
+      case "extracted": return { icon: CheckCircle2, color: "text-emerald-600", bg: "bg-emerald-50", label: typeInfo.label };
+      case "rejected": return { icon: Ban, color: "text-red-500", bg: "bg-red-50", label: "Rejected" };
+      case "error": return { icon: AlertCircle, color: "text-red-500", bg: "bg-red-50", label: "Error" };
+      default: return { icon: FileText, color: "text-slate-400", bg: "bg-slate-50", label: status };
+    }
+  };
+
+  // Categorize files
+  const activeFiles: Array<{ fs: ContextFileUploadState; idx: number }> = [];
+  const pendingFiles: Array<{ fs: ContextFileUploadState; idx: number }> = [];
+  const typeGroups: Record<string, Array<{ fs: ContextFileUploadState; idx: number; confidence: number }>> = {};
+
+  fileStates.forEach((fs, idx) => {
+    const isActive = fs.status === "identifying" || fs.status === "uploading" || fs.status === "extracting";
+    const isPending = fs.status === "pending";
+    const isIdentified = fs.status === "type_confirmed" || fs.status === "extracted";
+
+    if (isActive) {
+      activeFiles.push({ fs, idx });
+    } else if (isPending) {
+      pendingFiles.push({ fs, idx });
+    } else if (isIdentified) {
+      const dt = fs.identifyResult?.detectedType || fs.confirmedType || "other";
+      const typeKey = getTypeLabel(dt).label;
+      if (!typeGroups[typeKey]) typeGroups[typeKey] = [];
+      typeGroups[typeKey].push({ fs, idx, confidence: fs.identifyResult?.confidence || 0 });
+    } else {
+      // rejected, error, etc
+      const typeKey = "__other__";
+      if (!typeGroups[typeKey]) typeGroups[typeKey] = [];
+      typeGroups[typeKey].push({ fs, idx, confidence: 0 });
+    }
+  });
+
+  const identifiedCount = fileStates.filter(f => f.status === "type_confirmed" || f.status === "extracted").length;
+  const typeSummary = Object.entries(typeGroups)
+    .filter(([k]) => k !== "__other__")
+    .map(([t, files]) => `${files.length} ${t}${files.length !== 1 ? "s" : ""}`)
+    .join(", ");
+
+  const toggleGroup = (key: string) => {
+    setCollapsedGroups(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const renderFileRow = (fs: ContextFileUploadState, origIdx: number) => {
+    const detectedType = fs.identifyResult?.detectedType || fs.confirmedType;
+    const info = getStatusInfo(fs.status, detectedType) as any;
+    const StatusIcon = info.icon;
+    const isActive = origIdx === currentIndex;
+
+    return (
+      <div key={origIdx} className={cn(
+        "flex items-center gap-2.5 px-3 py-1.5 transition-colors",
+        isActive && "bg-cyan-50/50",
+      )}>
+        <div className={cn("h-5 w-5 rounded flex items-center justify-center shrink-0", info.bg)}>
+          <StatusIcon className={cn("h-3 w-3", info.color, info.spin && "animate-spin")} />
+        </div>
+        <p className="text-[10px] text-slate-600 truncate flex-1 min-w-0">{fs.file.name}</p>
+        {fs.identifyResult && fs.status !== "rejected" && (
+          <span className="text-[9px] font-mono text-slate-400 shrink-0">
+            {Math.round(fs.identifyResult.confidence * 100)}%
+          </span>
+        )}
+        {!fs.identifyResult && (
+          <span className={cn("text-[9px] shrink-0", info.color)}>{info.label}</span>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden flex flex-col h-full">
+      <div className="px-3 py-2.5 bg-slate-50 border-b border-slate-100 shrink-0">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <List className="h-3.5 w-3.5 text-slate-400" />
+            <span className="text-xs font-semibold text-slate-600">Document Queue</span>
+          </div>
+          <span className="text-[10px] font-mono text-slate-400">
+            {identifiedCount}/{fileStates.length}
+          </span>
+        </div>
+        {typeSummary && (
+          <p className="text-[10px] text-slate-400 mt-0.5 pl-5.5">{typeSummary}</p>
+        )}
+      </div>
+      <div className="flex-1 overflow-y-auto flex flex-col" style={{ scrollbarWidth: "thin" }}>
+        {/* Active files (always visible at top) */}
+        {activeFiles.map(({ fs, idx }) => renderFileRow(fs, idx))}
+
+        {/* Pending / queued files (always visible, right after active) */}
+        {pendingFiles.length > 0 && (
+          <div>
+            {activeFiles.length > 0 && (
+              <div className="px-3 py-1.5 border-t border-slate-100">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Queued
+                </span>
+                <span className="text-[9px] font-mono text-slate-400 ml-2">{pendingFiles.length}</span>
+              </div>
+            )}
+            {pendingFiles.map(({ fs, idx }) => renderFileRow(fs, idx))}
+          </div>
+        )}
+
+        {/* Other (rejected, error) */}
+        {typeGroups["__other__"] && typeGroups["__other__"].length > 0 && (
+          <div>
+            <div className="px-3 py-1.5 border-t border-slate-100">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-red-500">
+                Issues ({typeGroups["__other__"].length})
+              </span>
+            </div>
+            {typeGroups["__other__"].map(({ fs, idx }) => renderFileRow(fs, idx))}
+          </div>
+        )}
+
+        {/* Spacer pushes collapsed groups to bottom */}
+        <div className="flex-1" />
+
+        {/* Collapsible type groups (pinned to bottom) */}
+        {Object.entries(typeGroups)
+          .filter(([k]) => k !== "__other__")
+          .sort(([a], [b]) => {
+            const order: Record<string, number> = { Statement: 0, Invoice: 1, Bill: 2, Receipt: 3, Expense: 4 };
+            return (order[a] ?? 99) - (order[b] ?? 99);
+          })
+          .map(([typeKey, files]) => {
+            const isCollapsed = collapsedGroups[typeKey] ?? true;
+            const typeInfo = getTypeLabel(files[0]?.fs.identifyResult?.detectedType || files[0]?.fs.confirmedType);
+            const avgConf = files.length > 0
+              ? Math.round(files.reduce((s, f) => s + f.confidence, 0) / files.length * 100)
+              : 0;
+
+            return (
+              <div key={`group-${typeKey}`}>
+                <button
+                  onClick={() => toggleGroup(typeKey)}
+                  className="w-full px-3 py-2 flex items-center gap-2 border-t border-slate-100 hover:bg-slate-50/80 transition-colors"
+                >
+                  {isCollapsed
+                    ? <ChevronRight className="h-3 w-3 text-slate-400 shrink-0" />
+                    : <ChevronDown className="h-3 w-3 text-slate-400 shrink-0" />
+                  }
+                  <span className={cn("text-[10px] font-bold", typeInfo.color)}>
+                    {typeKey}s
+                  </span>
+                  <span className={cn("text-[9px] font-semibold px-1.5 py-0.5 rounded-full", typeInfo.bg, typeInfo.color)}>
+                    {files.length}
+                  </span>
+                  <span className="flex-1" />
+                  <span className="text-[9px] font-mono text-slate-400">
+                    avg {avgConf}%
+                  </span>
+                </button>
+                {!isCollapsed && (
+                  <div className="border-t border-slate-50">
+                    {files.map(({ fs, idx }) => renderFileRow(fs, idx))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+      </div>
+    </div>
+  );
+}
+
+// ============================================
 // UPLOAD DRAWER COMPONENT
 // ============================================
 
 export function UploadDrawer({ 
-  open, 
-  onOpenChange, 
   defaultType = "statement",
-  onUploadComplete,
 }: UploadDrawerProps) {
   const { user } = useAuth();
   const { isAtLimit, pagesUsed, pagesLimit } = useUsageStatus();
@@ -432,13 +628,14 @@ export function UploadDrawer({
   const [isMounted, setIsMounted] = useState(false);
   
   const [isDragging, setIsDragging] = useState(false);
-  const [processingStage, setProcessingStage] = useState("");
   
   // AI Thinking terminal state
   const [thinkingLines, setThinkingLines] = useState<ThinkingLine[]>([]);
   const [elapsedMs, setElapsedMs] = useState(0);
   const elapsedRef = useRef<NodeJS.Timeout | null>(null);
   const startTimeRef = useRef(0);
+  // Accumulates company names discovered from bank statements during batch identification
+  const discoveredCompanyNamesRef = useRef<Set<string>>(new Set());
   
   // Use persistent state from context
   const { 
@@ -449,6 +646,9 @@ export function UploadDrawer({
     setSavedCount, 
     setSkippedCount,
     resetState,
+    isDrawerOpen: open,
+    closeDrawer,
+    onCompleteRef,
   } = useUploadState();
   
   const fileStates = uploadState.fileStates;
@@ -475,12 +675,11 @@ export function UploadDrawer({
     f.status === "identifying" || 
     f.status === "extracting"
   );
-  const allScanned = fileStates.length > 0 && fileStates.every(f => 
-    f.status === "scanned" || f.status === "error" || f.status === "wrong_type" || f.status === "needs_rules_confirmation"
-  );
-  
-  // Files with wrong detected type
+  // Files with wrong detected type (used in preview step)
   const wrongTypeFiles = fileStates.filter(f => f.status === "wrong_type");
+  
+  // Rejected files (not relevant to SmartInvoice)
+  const rejectedFiles = fileStates.filter(f => f.status === "rejected");
   
   // Files needing CSV parsing rules confirmation (CSV files with new rules)
   const filesNeedingRulesConfirmation = useMemo(() => {
@@ -490,13 +689,15 @@ export function UploadDrawer({
     );
   }, [scannedFiles]);
   
-  // Files needing bank identification (bank name not in CSV)
+  // Files needing bank identification — only relevant for STATEMENT files
   const filesNeedingBankId = useMemo(() => {
-    return scannedFiles.filter(f => 
-      f.extractedData?.needsBankIdentification === true ||
-      f.extractedData?.bankName === "Unknown Bank"
-    );
-  }, [scannedFiles]);
+    return scannedFiles.filter(f => {
+      const ft = f.confirmedType || selectedType;
+      if (ft !== "statement") return false; // invoices/bills don't need bank ID
+      return f.extractedData?.needsBankIdentification === true ||
+        f.extractedData?.bankName === "Unknown Bank";
+    });
+  }, [scannedFiles, selectedType]);
   
   // Check if we can proceed with save (all CSV rules must be confirmed)
   const hasUnconfirmedRules = filesNeedingRulesConfirmation.length > 0;
@@ -517,6 +718,20 @@ export function UploadDrawer({
   }, [scannedFiles]);
 
   // Group valid scanned files by bank/account - create unique key from bankName + accountNumber
+  // Only group STATEMENT files by bank/account — invoices and bills don't need account grouping
+  const statementFiles = useMemo(() => 
+    validScannedFiles.filter(f => (f.confirmedType || selectedType) === "statement"),
+    [validScannedFiles, selectedType]
+  );
+  const invoiceFiles = useMemo(() => 
+    validScannedFiles.filter(f => (f.confirmedType || selectedType) === "invoice"),
+    [validScannedFiles, selectedType]
+  );
+  const billFiles = useMemo(() => 
+    validScannedFiles.filter(f => (f.confirmedType || selectedType) === "bill"),
+    [validScannedFiles, selectedType]
+  );
+
   const groupedByAccount = useMemo(() => {
     const groups: Record<string, {
       key: string;
@@ -532,19 +747,18 @@ export function UploadDrawer({
       totalPages: number;
     }> = {};
     
-    // Helper to normalize bank names for consistent grouping
     const normalizeBankName = (name: string): string => {
       return name
         .toLowerCase()
-        .replace(/\./g, '') // Remove periods (N.V. -> NV)
-        .replace(/\s+/g, ' ') // Normalize whitespace
+        .replace(/\./g, '')
+        .replace(/\s+/g, ' ')
         .trim();
     };
     
-    validScannedFiles.forEach(file => {
+    // ONLY group statement files — invoices/bills don't have bank accounts
+    statementFiles.forEach(file => {
       const bankName = file.extractedData?.bankName || "Unknown Bank";
       const accountNumber = file.extractedData?.accountNumber || "Unknown";
-      // Use normalized bank name for grouping key to handle variations like "N.V." vs "NV"
       const normalizedBankName = normalizeBankName(bankName);
       const key = `${normalizedBankName}|${accountNumber}`;
       
@@ -566,7 +780,6 @@ export function UploadDrawer({
       
       groups[key].files.push(file);
       
-      // Update period range
       const ps = file.extractedData?.periodStart || "";
       const pe = file.extractedData?.periodEnd || "";
       if (ps && (!groups[key].periodStart || ps < groups[key].periodStart)) {
@@ -581,23 +794,12 @@ export function UploadDrawer({
     });
     
     return Object.values(groups);
-  }, [validScannedFiles]);
+  }, [statementFiles]);
   
-  // For backward compatibility - use first group as aggregate (for single-bank uploads)
-  const aggregateData = groupedByAccount.length > 0 ? groupedByAccount[0] : null;
   
   // Check if we have multiple different banks/accounts
   const hasMultipleBanks = groupedByAccount.length > 1;
 
-  // Debug logging
-  if (scannedFiles.length > 0) {
-    console.log("=== GROUPED DATA DEBUG ===");
-    console.log("Groups count:", groupedByAccount.length);
-    groupedByAccount.forEach((g, i) => {
-      console.log(`Group ${i}: ${g.bankName} (${g.accountNumber}) - ${g.files.length} files`);
-    });
-    console.log("==========================");
-  }
 
   // Handle mount/unmount with animation
   useEffect(() => {
@@ -633,9 +835,9 @@ export function UploadDrawer({
     setIsVisible(false);
     setTimeout(() => {
       setIsMounted(false);
-      onOpenChange(false);
+      closeDrawer();
     }, 500);
-  }, [onOpenChange]);
+  }, [closeDrawer]);
 
   // Handle escape key
   useEffect(() => {
@@ -687,8 +889,8 @@ export function UploadDrawer({
 
       // Step 2: Identify Document Type (FAST - first page only)
       addThinkingLine("step", "AI CLASSIFICATION");
-      addThinkingLine("analyze", "Initializing Gemini 3 Flash with thinking...");
-      addThinkingLine("info", "Mode: ThinkingLevel=LOW, structured JSON output");
+      addThinkingLine("analyze", "Initializing Gemini 3 Pro with thinking...");
+      addThinkingLine("info", "Mode: ThinkingLevel=MEDIUM, structured JSON output");
       addThinkingLine("search", "Scanning first page for document signatures...");
       addThinkingLine("search", "Looking for: bank logos, invoice headers, transaction tables...");
       addThinkingLine("template", "Classifying document type with confidence scoring...");
@@ -698,10 +900,21 @@ export function UploadDrawer({
       const mimeType = getMimeType(fileState.file);
       const identifyFn = httpsCallable(functions, "identifyDocumentType", { timeout: 60000 });
       
+      // Resolve all known company names: profile + aliases + discovered from bank statements
+      const primaryName = (user as any)?.companyName || null;
+      const aliases: string[] = (user as any)?.companyAliases || [];
+      const discoveredNames = [...discoveredCompanyNamesRef.current];
+      
+      // Combine all known names (deduped)
+      const allNames = [...new Set([primaryName, ...aliases, ...discoveredNames].filter(Boolean))];
+      const companyName = allNames.length > 0 ? allNames.join(" / ") : null;
+      
       const identifyResult = await identifyFn({ 
         fileUrl: url, 
         mimeType,
-        fileName: fileState.file.name 
+        fileName: fileState.file.name,
+        // Pass all known company names so AI can determine invoice direction
+        companyName,
       });
       
       const identified = identifyResult.data as IdentifyResult;
@@ -725,10 +938,17 @@ export function UploadDrawer({
       if (identified.detectedBank) {
         addThinkingLine("match", `Bank: ${identified.detectedBank}`);
       }
-      if (identified.detectedVendor) {
+      // Show invoice direction info
+      if (identified.invoiceFrom) {
+        addThinkingLine("match", `From: ${identified.invoiceFrom}`);
+      }
+      if (identified.invoiceTo) {
+        addThinkingLine("match", `To: ${identified.invoiceTo}`);
+      }
+      if (identified.detectedVendor && !identified.invoiceFrom) {
         addThinkingLine("match", `Vendor: ${identified.detectedVendor}`);
       }
-      if (identified.detectedCustomer) {
+      if (identified.detectedCustomer && !identified.invoiceTo) {
         addThinkingLine("match", `Customer: ${identified.detectedCustomer}`);
       }
       if (identified.currency) {
@@ -736,13 +956,38 @@ export function UploadDrawer({
       }
       
       addThinkingLine("info", identified.reasoning);
+      
+      // Determine if this document is relevant to SmartInvoice
+      const rejectedTypes = ["other", "vendor_list"];
+      const isRejected = rejectedTypes.includes(identified.detectedType) || 
+        (identified.detectedType === "other" && identified.confidence < 0.5);
+      
+      if (isRejected) {
+        addThinkingLine("warning", "⚠  Document type not supported by SmartInvoice");
+        addThinkingLine("info", "SmartInvoice processes: Bank Statements, Invoices, and Bills");
+        addThinkingLine("warning", "✗  This document has been rejected");
+        
+        updateFileState({
+          status: "rejected",
+          identifyResult: identified,
+          error: `Not a supported document type. Detected: ${typeLabels[identified.detectedType] || "Unknown"}. SmartInvoice only processes bank statements, invoices, and bills.`,
+        });
+        return;
+      }
+      
       addThinkingLine("warning", "⏸  Waiting for user confirmation...");
       
       // Map detected type to our DocumentType
       let mappedType: DocumentType = "statement";
       if (identified.detectedType === "bank_statement") mappedType = "statement";
-      else if (identified.detectedType === "invoice") mappedType = "invoice";
-      else if (identified.detectedType === "bill") mappedType = "bill";
+      else if (identified.detectedType === "invoice" || identified.detectedType === "invoice_list") mappedType = "invoice";
+      else if (identified.detectedType === "bill" || identified.detectedType === "receipt") mappedType = "bill";
+      else if (identified.detectedType === "payment_record") mappedType = "statement";
+      
+      // If bank statement, capture account holder name for subsequent invoice direction detection
+      if (identified.detectedType === "bank_statement" && identified.detectedCustomer) {
+        discoveredCompanyNamesRef.current.add(identified.detectedCustomer);
+      }
       
       updateFileState({ 
         status: "type_confirmed",
@@ -751,11 +996,7 @@ export function UploadDrawer({
       });
 
     } catch (err) {
-      console.error("=== IDENTIFICATION ERROR ===");
-      console.error("Full error:", err);
-      console.error("Error code:", (err as any)?.code);
-      console.error("Error message:", (err as any)?.message);
-      console.error("============================");
+      console.error("Identification error:", (err as any)?.message || err);
       
       const errorMessage = err instanceof Error ? err.message : String(err);
       const errorCode = (err as any)?.code || "";
@@ -773,7 +1014,7 @@ export function UploadDrawer({
         elapsedRef.current = null;
       }
     }
-  }, [user?.id, setFileStates]);
+  }, [user?.id, (user as any)?.companyName, (user as any)?.companyAliases, setFileStates]);
 
   // PHASE 2: Extract Full Data (after type confirmation)
   const extractFile = useCallback(async (fileState: ContextFileUploadState, index: number) => {
@@ -897,6 +1138,8 @@ export function UploadDrawer({
   }, [user?.id, setFileStates]);
 
   // Process all files - PHASE 1 (Identify)
+  // Prioritizes likely bank statements first so account holder names
+  // are available as company context for invoice direction detection
   const identifyAllFiles = useCallback(async (files: File[]) => {
     if (!user?.id) return;
     
@@ -910,18 +1153,113 @@ export function UploadDrawer({
     }
     
     setCurrentStep("identifying");
-    setProcessingStage("");
     
-    // Initialize file states
-    const initialStates: ContextFileUploadState[] = files.map(file => ({
+    // Clear previously discovered names for fresh batch
+    discoveredCompanyNamesRef.current.clear();
+    
+    // Sort files: likely bank statements first, then everything else
+    // This ensures account holder names are available for invoice direction detection
+    const statementPatterns = /\b(statement|bank|rbc|chase|hsbc|citi|wells|boa|ing|abn|rabo)\b/i;
+    const monthPatterns = /^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)(uary|ruary|ch|il|e|ust|tember|ober|ember)?\.(pdf|csv|xlsx?)$/i;
+    
+    const sortedFiles = [...files].sort((a, b) => {
+      const aIsStatement = statementPatterns.test(a.name) || monthPatterns.test(a.name);
+      const bIsStatement = statementPatterns.test(b.name) || monthPatterns.test(b.name);
+      if (aIsStatement && !bIsStatement) return -1;
+      if (!aIsStatement && bIsStatement) return 1;
+      return 0;
+    });
+    
+    // Initialize file states in sorted order
+    const initialStates: ContextFileUploadState[] = sortedFiles.map(file => ({
       file,
       status: "pending",
     }));
     setFileStates(initialStates);
     
-    // Process files sequentially for better UX (user sees progress)
-    for (let i = 0; i < files.length; i++) {
-      await identifyFile(initialStates[i], i);
+    // Process files with limited parallelism (2 at a time)
+    const CONCURRENCY = 2;
+    for (let i = 0; i < sortedFiles.length; i += CONCURRENCY) {
+      const batch = [];
+      for (let j = i; j < Math.min(i + CONCURRENCY, sortedFiles.length); j++) {
+        batch.push(identifyFile(initialStates[j], j));
+      }
+      await Promise.all(batch);
+    }
+    
+    // POST-IDENTIFICATION RECONCILIATION
+    // Now that ALL files are identified, look at the full picture and auto-correct directions.
+    // Bank statements reveal the user's company name → use it to fix any invoice/bill misclassifications.
+    
+    // Build company identity signals from: user profile + discovered bank statement holders
+    const companySignals = new Set<string>();
+    if ((user as any)?.companyName) companySignals.add((user as any).companyName.toLowerCase().trim());
+    for (const alias of ((user as any)?.companyAliases || [])) {
+      if (alias) companySignals.add(alias.toLowerCase().trim());
+    }
+    for (const name of discoveredCompanyNamesRef.current) {
+      companySignals.add(name.toLowerCase().trim());
+    }
+    
+    if (companySignals.size > 0) {
+      const normalize = (s: string) => s.toLowerCase().replace(/\b(bv|b\.v\.|nv|n\.v\.|ltd|llc|inc|corp|gmbh|sa|s\.a\.|sl|s\.l\.|srl|s\.r\.l\.|plc|co|pty|pvt)\b/gi, "").replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
+      const matchesCompany = (name: string | null | undefined) => {
+        if (!name) return false;
+        const norm = normalize(name);
+        return [...companySignals].some(signal => {
+          const normSignal = normalize(signal);
+          return norm === normSignal || norm.includes(normSignal) || normSignal.includes(norm);
+        });
+      };
+      
+      // First pass: figure out which files need flipping (read-only scan via updater)
+      const flipsNeeded = new Set<number>();
+      const flipDirections = new Map<number, "bill" | "invoice">();
+      let totalFiles = 0;
+      
+      setFileStates(prev => {
+        totalFiles = prev.length;
+        prev.forEach((f, idx) => {
+          if (f.status !== "type_confirmed" || !f.identifyResult) return;
+          const ir = f.identifyResult;
+          const dt = ir.detectedType;
+          if (dt !== "invoice" && dt !== "bill") return;
+          
+          const fromName = ir.invoiceFrom || ir.detectedVendor;
+          const toName = ir.invoiceTo || ir.detectedCustomer;
+          
+          if (dt === "invoice" && matchesCompany(toName) && !matchesCompany(fromName)) {
+            flipsNeeded.add(idx);
+            flipDirections.set(idx, "bill");
+          } else if (dt === "bill" && matchesCompany(fromName) && !matchesCompany(toName)) {
+            flipsNeeded.add(idx);
+            flipDirections.set(idx, "invoice");
+          }
+        });
+        
+        // Apply flips in a single pass
+        if (flipsNeeded.size === 0) return prev;
+        return prev.map((f, idx) => {
+          const newType = flipDirections.get(idx);
+          if (!newType || !f.identifyResult) return f;
+          return {
+            ...f,
+            confirmedType: newType as DocumentType,
+            identifyResult: { ...f.identifyResult, detectedType: newType as any },
+          };
+        });
+      });
+      
+      // Terminal feedback — outside setFileStates to avoid cross-component setState
+      if (flipsNeeded.size > 0) {
+        console.log(`[SmartInvoice] Post-identification reconciliation: flipped ${flipsNeeded.size} document(s) based on company identity signals`);
+        setThinkingLines(lines => [
+          ...lines,
+          { type: "step" as ThinkingLineType, message: "SMART DIRECTION RECONCILIATION", timestamp: Date.now() },
+          { type: "analyze" as ThinkingLineType, message: `Cross-referencing ${companySignals.size} company identity signals across ${totalFiles} documents...`, timestamp: Date.now() },
+          { type: "success" as ThinkingLineType, message: `Auto-corrected ${flipsNeeded.size} document${flipsNeeded.size !== 1 ? "s" : ""} — invoice/bill direction fixed based on company identity match`, timestamp: Date.now() },
+        ]);
+      }
     }
     
     setCurrentStep("confirm_type");
@@ -968,7 +1306,6 @@ export function UploadDrawer({
     if (!user?.id || filesNeedingRulesConfirmation.length === 0) return;
     
     setConfirmingRules(true);
-    setProcessingStage("Confirming parsing rules...");
     
     try {
       // Get unique rule IDs to confirm
@@ -1006,7 +1343,6 @@ export function UploadDrawer({
     }
     
     setConfirmingRules(false);
-    setProcessingStage("");
   }, [user?.id, filesNeedingRulesConfirmation, setFileStates]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -1017,29 +1353,54 @@ export function UploadDrawer({
 
   // Save all documents (only valid ones)
   const handleSaveAll = async () => {
-    console.log("=== SAVE ALL CLICKED ===");
-    console.log("user?.id:", user?.id);
-    console.log("validScannedFiles.length:", validScannedFiles.length);
-    console.log("problemFiles.length:", problemFiles.length);
-    console.log("scannedFiles.length:", scannedFiles.length);
-    console.log("selectedType:", selectedType);
-    console.log("config.collection:", config.collection);
     
     if (!user?.id || validScannedFiles.length === 0) {
-      console.warn("Early return - no user or no valid files!");
       return;
     }
 
-    setCurrentStep("processing");
-    setProcessingStage(`Saving ${config.title.toLowerCase()}s...`);
+    setCurrentStep("saving");
     setSavingProgress(0);
 
     try {
+      // Auto-manage company identity from bank statement account holders
+      if (groupedByAccount.length > 0) {
+        const existingName = (user as any)?.companyName || "";
+        const existingAliases: string[] = (user as any)?.companyAliases || [];
+        const allKnownNames = new Set([existingName, ...existingAliases].filter(Boolean).map(n => n.toLowerCase().trim()));
+        
+        const newNames: string[] = [];
+        for (const group of groupedByAccount) {
+          if (group.accountHolderName && !allKnownNames.has(group.accountHolderName.toLowerCase().trim())) {
+            newNames.push(group.accountHolderName);
+            allKnownNames.add(group.accountHolderName.toLowerCase().trim());
+          }
+        }
+        
+        if (newNames.length > 0) {
+          try {
+            const updates: Record<string, any> = {};
+            if (!existingName) {
+              // First time — set the primary company name
+              updates.companyName = newNames[0];
+              if (newNames.length > 1) {
+                updates.companyAliases = [...existingAliases, ...newNames.slice(1)];
+              }
+              toast.success(`Company detected: "${newNames[0]}"`);
+            } else {
+              // Already have a primary — add new names as aliases
+              updates.companyAliases = [...existingAliases, ...newNames];
+              toast.info(`New company alias${newNames.length > 1 ? "es" : ""} added: ${newNames.join(", ")}`);
+            }
+            await updateDoc(doc(db, "users", user.id), updates);
+          } catch { /* non-critical */ }
+        }
+      }
+
       // For statements with multiple banks, create/find accounts for each group
       const accountIdMap: Record<string, string> = {}; // key -> accountId
       
-      if (selectedType === "statement" && groupedByAccount.length > 0) {
-        setProcessingStage(`Setting up ${groupedByAccount.length} account(s)...`);
+      // Create/find accounts for any statement files (even in mixed uploads)
+      if (groupedByAccount.length > 0) {
         
         for (const group of groupedByAccount) {
           // Check if account exists
@@ -1082,7 +1443,6 @@ export function UploadDrawer({
           }
         }
         
-        console.log("Created/found accounts:", accountIdMap);
       }
 
       // Save each statement (with deduplication)
@@ -1102,16 +1462,20 @@ export function UploadDrawer({
         const fileState = validScannedFiles[i];
         const extracted = fileState.extractedData!;
         
+        // USE EACH FILE'S OWN TYPE — not the global selectedType
+        // This is critical for mixed uploads (invoices + statements in one batch)
+        const fileType = fileState.confirmedType || selectedType;
+        const fileConfig = TYPE_CONFIG[fileType] || config;
+        
         // Determine which account this file belongs to (use normalized bank name)
         const normalizedBankName = normalizeBankName(extracted.bankName || "Unknown Bank");
         const fileKey = `${normalizedBankName}|${extracted.accountNumber || "Unknown"}`;
         const accountId = accountIdMap[fileKey] || null;
         
-        setProcessingStage(`Checking ${i + 1} of ${validScannedFiles.length}...`);
         setSavingProgress(((i + 0.5) / validScannedFiles.length) * 100);
 
         // Deduplication check for statements
-        if (selectedType === "statement" && extracted.periodStart && extracted.periodEnd) {
+        if (fileType === "statement" && extracted.periodStart && extracted.periodEnd) {
           const dupeQuery = query(
             collection(db, "statements"),
             where("userId", "==", user.id),
@@ -1122,14 +1486,13 @@ export function UploadDrawer({
           const existingStatements = await getDocs(dupeQuery);
           
           if (!existingStatements.empty) {
-            console.log(`Skipping duplicate statement: ${extracted.periodStart} - ${extracted.periodEnd}`);
             skippedCount++;
-            continue; // Skip this file
+            continue;
           }
         }
         
-        // Deduplication check for bills - by documentNumber + vendorName + total
-        if (selectedType === "bill" && extracted.documentNumber && extracted.documentNumber !== "Unknown") {
+        // Deduplication check for bills
+        if (fileType === "bill" && extracted.documentNumber && extracted.documentNumber !== "Unknown") {
           const dupeQuery = query(
             collection(db, "bills"),
             where("userId", "==", user.id),
@@ -1140,14 +1503,13 @@ export function UploadDrawer({
           const existingBills = await getDocs(dupeQuery);
           
           if (!existingBills.empty) {
-            console.log(`Skipping duplicate bill: ${extracted.documentNumber} from ${extracted.vendorName}`);
             skippedCount++;
-            continue; // Skip this file
+            continue;
           }
         }
         
-        // Deduplication check for invoices - by documentNumber + customerName + total
-        if (selectedType === "invoice" && extracted.documentNumber && extracted.documentNumber !== "Unknown") {
+        // Deduplication check for invoices
+        if (fileType === "invoice" && extracted.documentNumber && extracted.documentNumber !== "Unknown") {
           const dupeQuery = query(
             collection(db, "invoices"),
             where("userId", "==", user.id),
@@ -1158,27 +1520,17 @@ export function UploadDrawer({
           const existingInvoices = await getDocs(dupeQuery);
           
           if (!existingInvoices.empty) {
-            console.log(`Skipping duplicate invoice: ${extracted.documentNumber} from ${extracted.customerName}`);
             skippedCount++;
-            continue; // Skip this file
+            continue;
           }
         }
 
-        setProcessingStage(`Saving ${savedCount + 1}...`);
         setSavingProgress(((i + 1) / validScannedFiles.length) * 100);
 
         // For CSV/Excel files with parsing rules, use extractInvoices function
-        const isCSVFile = extracted.isCSV && extracted.csvParsingRules && (selectedType === "invoice" || selectedType === "bill");
-        
-        console.log("=== SAVE CHECK ===");
-        console.log("extracted.isCSV:", extracted.isCSV);
-        console.log("extracted.csvParsingRules:", extracted.csvParsingRules);
-        console.log("selectedType:", selectedType);
-        console.log("isCSVFile:", isCSVFile);
-        console.log("=================");
+        const isCSVFile = extracted.isCSV && extracted.csvParsingRules && (fileType === "invoice" || fileType === "bill");
         
         if (isCSVFile && fileState.fileUrl) {
-          console.log("CSV file detected with parsing rules - calling extractInvoices");
           const extractFn = httpsCallable(functions, "extractInvoices", { timeout: 300000 });
           const mimeType = getMimeType(fileState.file);
           
@@ -1190,7 +1542,6 @@ export function UploadDrawer({
             });
             
             const result = extractResult.data as { invoiceCount: number; summary?: { totalAmount?: number } };
-            console.log(`Extracted ${result.invoiceCount} invoices from CSV`);
             savedCount += result.invoiceCount;
           } catch (extractErr) {
             console.error("Extract invoices error:", extractErr);
@@ -1205,7 +1556,7 @@ export function UploadDrawer({
             fileType: fileState.file.name.split('.').pop()?.toLowerCase() || "pdf",
             fileSize: fileState.file.size,
             mimeType: getMimeType(fileState.file),
-            status: "pending_extraction",
+            status: fileType === "statement" ? "pending_extraction" : "completed",
             pageCount: extracted.pageCount || 1,
             confidence: extracted.confidence || 0,
             transactionCount: 0,
@@ -1213,7 +1564,7 @@ export function UploadDrawer({
             uploadedAt: serverTimestamp(),
           };
 
-          if (selectedType === "statement") {
+          if (fileType === "statement") {
             docData.accountId = accountId;
             docData.bankName = extracted.bankName || "Unknown";
             docData.accountNumber = extracted.accountNumber || "";
@@ -1222,35 +1573,43 @@ export function UploadDrawer({
             docData.periodEnd = extracted.periodEnd ? Timestamp.fromDate(new Date(extracted.periodEnd)) : null;
             docData.openingBalance = extracted.openingBalance;
             docData.closingBalance = extracted.closingBalance;
-          } else if (selectedType === "invoice") {
+          } else if (fileType === "invoice") {
             docData.direction = "outgoing";
             docData.documentType = "invoice";
             docData.documentNumber = extracted.documentNumber || "";
             docData.customerName = extracted.customerName || "Unknown";
+            docData.vendorName = extracted.vendorName || "";
             docData.documentDate = extracted.documentDate ? Timestamp.fromDate(new Date(extracted.documentDate)) : serverTimestamp();
             docData.dueDate = extracted.dueDate ? Timestamp.fromDate(new Date(extracted.dueDate)) : null;
             docData.total = extracted.total || 0;
             docData.amountRemaining = extracted.total || 0;
             docData.currency = extracted.currency || "USD";
+            docData.lineItems = extracted.lineItems || [];
             docData.reconciliationStatus = "unmatched";
             docData.paymentStatus = "unpaid";
-          } else if (selectedType === "bill") {
+          } else if (fileType === "bill") {
             docData.direction = "incoming";
             docData.documentType = "bill";
             docData.documentNumber = extracted.documentNumber || "";
             docData.vendorName = extracted.vendorName || "Unknown";
+            docData.customerName = extracted.customerName || "";
             docData.documentDate = extracted.documentDate ? Timestamp.fromDate(new Date(extracted.documentDate)) : serverTimestamp();
             docData.dueDate = extracted.dueDate ? Timestamp.fromDate(new Date(extracted.dueDate)) : null;
             docData.total = extracted.total || 0;
             docData.amountRemaining = extracted.total || 0;
             docData.currency = extracted.currency || "USD";
+            docData.lineItems = extracted.lineItems || [];
             docData.reconciliationStatus = "unmatched";
             docData.paymentStatus = "unpaid";
           }
 
-          console.log(`Saving to ${config.collection}:`, docData);
-          const docRef = await addDoc(collection(db, config.collection), docData);
-          console.log(`Saved doc ID: ${docRef.id}`);
+          // Save to the CORRECT collection based on this file's type
+          const targetCollection = fileType === "statement" ? "statements" 
+            : fileType === "invoice" ? "invoices" 
+            : fileType === "bill" ? "bills" 
+            : fileConfig.collection;
+          
+          await addDoc(collection(db, targetCollection), docData);
           savedCount++;
         }
       }
@@ -1259,7 +1618,7 @@ export function UploadDrawer({
       setSavedCount(savedCount);
       setSkippedCount(skippedCount);
       setCurrentStep("complete");
-      onUploadComplete?.();
+      onCompleteRef.current?.();
 
     } catch (err) {
       console.error("Save error:", err);
@@ -1293,13 +1652,13 @@ export function UploadDrawer({
       {/* Panel */}
       <div
         className={cn(
-          "fixed top-0 right-0 bottom-0 z-50 w-full max-w-lg bg-white shadow-2xl",
+          "fixed top-0 right-0 bottom-0 z-50 w-full max-w-4xl bg-white shadow-2xl",
           "flex flex-col",
           "transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]",
           isVisible ? "translate-x-0" : "translate-x-full"
         )}
       >
-        {/* Header */}
+        {/* Header — dynamically reflects detected document types */}
         <div className="px-5 py-4 border-b shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -1312,8 +1671,36 @@ export function UploadDrawer({
                 <Icon className="h-5 w-5" />
               </div>
               <div>
-                <h2 className="text-sm font-semibold text-slate-900">{config.title}</h2>
-                <p className="text-xs text-slate-500">{config.subtitle}</p>
+                <h2 className="text-sm font-semibold text-slate-900">
+                  {(() => {
+                    // Once we have identified files, show a smart title
+                    const identifiedFiles = fileStates.filter(f => f.identifyResult?.detectedType);
+                    if (identifiedFiles.length === 0) return config.title;
+                    const types = new Set(identifiedFiles.map(f => f.identifyResult!.detectedType));
+                    if (types.size === 1) {
+                      const t = [...types][0];
+                      if (t === "bank_statement" || t === "statement") return "Upload Bank Statements";
+                      if (t === "invoice") return "Upload Invoices";
+                      if (t === "bill") return "Upload Bills";
+                      return config.title;
+                    }
+                    return "Upload Documents";
+                  })()}
+                </h2>
+                <p className="text-xs text-slate-500">
+                  {(() => {
+                    const identifiedFiles = fileStates.filter(f => f.identifyResult?.detectedType);
+                    if (identifiedFiles.length === 0) return config.subtitle;
+                    const counts: Record<string, number> = {};
+                    identifiedFiles.forEach(f => {
+                      const dt = f.identifyResult!.detectedType;
+                      const lbl = dt === "bank_statement" || dt === "statement" ? "statement" : dt === "invoice" ? "invoice" : dt === "bill" ? "bill" : dt;
+                      counts[lbl] = (counts[lbl] || 0) + 1;
+                    });
+                    const parts = Object.entries(counts).map(([t, c]) => `${c} ${t}${c !== 1 ? "s" : ""}`);
+                    return `AI detected ${parts.join(", ")}`;
+                  })()}
+                </p>
               </div>
             </div>
             <button
@@ -1437,178 +1824,372 @@ export function UploadDrawer({
 
           {/* STEP: Identifying (Phase 1) */}
           {currentStep === "identifying" && (
-            <div className="p-5 h-full flex flex-col">
-              {/* AI Thinking Terminal */}
-              {thinkingLines.length > 0 && (
-                <AIThinkingTerminal
-                  lines={thinkingLines}
-                  isRunning={processingFiles.length > 0}
-                  fileName={fileStates[0]?.file.name || "document"}
-                  elapsedMs={elapsedMs}
+            <div className="p-5 h-full flex gap-3 min-h-0">
+              {/* AI Thinking Terminal — fixed 2/3, same height as queue */}
+              <div className="w-2/3 shrink-0 min-w-0 flex flex-col h-full">
+                {thinkingLines.length > 0 && (
+                  <AIThinkingTerminal
+                    lines={thinkingLines}
+                    isRunning={processingFiles.length > 0}
+                    fileName={processingFiles[0]?.file.name || fileStates[0]?.file.name || "document"}
+                    elapsedMs={elapsedMs}
+                  />
+                )}
+              </div>
+              {/* File Queue — fixed 1/3, same height as terminal */}
+              <div className="w-1/3 shrink-0 min-w-0 h-full">
+                <FileQueuePanel 
+                  fileStates={fileStates} 
+                  currentIndex={fileStates.findIndex(f => f.status === "identifying" || f.status === "uploading")}
                 />
-              )}
+              </div>
             </div>
           )}
 
           {/* STEP: Confirm Type (User confirmation) */}
-          {currentStep === "confirm_type" && (
-            <div className="p-5 h-full flex flex-col space-y-4">
-              {/* Show thinking terminal if we have lines */}
-              {thinkingLines.length > 0 && (
-                <AIThinkingTerminal
-                  lines={thinkingLines}
-                  isRunning={false}
-                  fileName={fileStates[0]?.file.name || "document"}
-                  elapsedMs={elapsedMs}
-                />
-              )}
-              
-              {fileStates.map((fs, idx) => {
-                // Show error state
-                if (fs.status === "error") {
-                  return (
-                    <div key={idx} className="rounded-xl border border-red-200 bg-red-50 p-4">
-                      <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 bg-red-100 rounded-lg">
-                          <AlertCircle className="h-5 w-5 text-red-600" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-red-800">{fs.file.name}</p>
-                          <p className="text-xs text-red-600">{fs.error || "Failed to identify"}</p>
-                        </div>
-                      </div>
-                      <Button
-                        onClick={() => identifyFile(fs, idx)}
-                        variant="outline"
-                        size="sm"
-                        className="border-red-200 text-red-700 hover:bg-red-100"
-                      >
-                        Retry
-                      </Button>
+          {currentStep === "confirm_type" && (() => {
+            // Group confirmed files by detected type for summary
+            const typeGroups: Record<string, ContextFileUploadState[]> = {};
+            const typeLabels: Record<string, string> = {
+              bank_statement: "Bank Statement",
+              invoice: "Invoice (Outgoing A/R)",
+              bill: "Bill (Incoming A/P)",
+              receipt: "Receipt → Bill",
+              invoice_list: "Invoice List",
+              vendor_list: "Vendor List",
+              payment_record: "Payment Record",
+              other: "Unknown",
+            };
+            const typeIcons: Record<string, any> = {
+              bank_statement: FileText,
+              invoice: ArrowUpRight,
+              bill: ArrowDownRight,
+              receipt: Receipt,
+              invoice_list: FileSpreadsheet,
+              vendor_list: Building2,
+              payment_record: CheckCircle2,
+              other: Files,
+            };
+            
+            confirmedFiles.forEach(fs => {
+              const t = fs.identifyResult?.detectedType || "other";
+              if (!typeGroups[t]) typeGroups[t] = [];
+              typeGroups[t].push(fs);
+            });
+            
+            // Collect unique banks/vendors/currencies
+            const banks = new Set<string>();
+            const currencies = new Set<string>();
+            confirmedFiles.forEach(fs => {
+              if (fs.identifyResult?.detectedBank) banks.add(fs.identifyResult.detectedBank);
+              if (fs.identifyResult?.currency) currencies.add(fs.identifyResult.currency);
+            });
+            
+            const avgConfidence = confirmedFiles.length > 0
+              ? confirmedFiles.reduce((sum, f) => sum + (f.identifyResult?.confidence || 0), 0) / confirmedFiles.length
+              : 0;
+
+            return (
+              <div className="p-5 h-full flex flex-col space-y-4">
+                {/* Terminal 2/3 + Queue 1/3 side by side */}
+                <div className="flex gap-3 flex-1 min-h-0">
+                  {/* AI Thinking Terminal — fixed 2/3, same height as queue */}
+                  <div className="w-2/3 shrink-0 min-w-0 flex flex-col h-full">
+                    {thinkingLines.length > 0 ? (
+                      <AIThinkingTerminal
+                        lines={thinkingLines}
+                        isRunning={false}
+                        fileName={fileStates[0]?.file.name || "document"}
+                        elapsedMs={elapsedMs}
+                      />
+                    ) : (
+                      <AIThinkingTerminal
+                        lines={[
+                          { type: "success", message: `Identified ${confirmedFiles.length} document${confirmedFiles.length !== 1 ? "s" : ""}` },
+                          ...(rejectedFiles.length > 0 ? [{ type: "warning" as const, message: `${rejectedFiles.length} rejected (unsupported type)` }] : []),
+                          ...(errorFiles.length > 0 ? [{ type: "warning" as const, message: `${errorFiles.length} failed to identify` }] : []),
+                          { type: "info", message: "Waiting for confirmation to extract..." },
+                        ]}
+                        isRunning={false}
+                        fileName={`${fileStates.length} documents`}
+                        elapsedMs={elapsedMs}
+                      />
+                    )}
+                  </div>
+                  {/* File Queue — fixed 1/3, same height as terminal */}
+                  <div className="w-1/3 shrink-0 min-w-0 h-full">
+                    <FileQueuePanel fileStates={fileStates} />
+                  </div>
+                </div>
+                
+                {/* Status banners */}
+                {confirmedFiles.length === 0 && rejectedFiles.length > 0 && errorFiles.length === 0 && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-5 text-center">
+                    <div className="h-12 w-12 rounded-xl bg-amber-100 flex items-center justify-center mx-auto mb-3">
+                      <ShieldAlert className="h-6 w-6 text-amber-600" />
                     </div>
-                  );
-                }
+                    <h3 className="text-sm font-semibold text-amber-900 mb-1">No supported documents found</h3>
+                    <p className="text-xs text-amber-700 mb-4">
+                      None of the uploaded files are bank statements, invoices, or bills. Please upload relevant financial documents.
+                    </p>
+                    <Button
+                      onClick={() => { resetState(); setThinkingLines([]); }}
+                      className="bg-slate-900 text-white hover:bg-slate-800"
+                    >
+                      <Upload className="h-4 w-4 mr-2" />
+                      Try Again
+                    </Button>
+                  </div>
+                )}
                 
-                if (!fs.identifyResult) return null;
+                {(rejectedFiles.length > 0 && confirmedFiles.length > 0) && (
+                  <div className="flex items-center gap-2.5 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-lg shrink-0">
+                    <ShieldAlert className="h-4 w-4 text-amber-600 shrink-0" />
+                    <p className="text-xs text-amber-700">
+                      <strong>{rejectedFiles.length}</strong> {rejectedFiles.length === 1 ? "file" : "files"} rejected (not a supported document type)
+                    </p>
+                  </div>
+                )}
                 
-                const typeLabels: Record<string, string> = {
-                  bank_statement: "Bank Statement",
-                  invoice: "Invoice (Outgoing/A/R)",
-                  bill: "Bill (Incoming/A/P)",
-                  receipt: "Receipt",
-                  invoice_list: "Invoice List (CSV)",
-                  vendor_list: "Vendor List",
-                  payment_record: "Payment Record",
-                  other: "Unknown Document Type",
-                };
+                {errorFiles.length > 0 && (
+                  <div className="flex items-center gap-2.5 px-3 py-2.5 bg-red-50 border border-red-200 rounded-lg shrink-0">
+                    <AlertCircle className="h-4 w-4 text-red-600 shrink-0" />
+                    <p className="text-xs text-red-700">
+                      <strong>{errorFiles.length}</strong> {errorFiles.length === 1 ? "file" : "files"} failed to identify
+                    </p>
+                  </div>
+                )}
                 
-                const typeIcons: Record<string, any> = {
-                  bank_statement: FileText,
-                  invoice: ArrowUpRight,
-                  bill: ArrowDownRight,
-                  receipt: Receipt,
-                  invoice_list: FileSpreadsheet,
-                  vendor_list: Building2,
-                  payment_record: CheckCircle2,
-                  other: Files,
-                };
-                
-                const Icon = typeIcons[fs.identifyResult.detectedType] || FileText;
-                
-                return (
-                  <div key={idx} className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-                    {/* Header strip */}
+                {/* Company name prompt — compact with AI suggestions */}
+                {confirmedFiles.length > 0 && !((user as any)?.companyName) && 
+                  confirmedFiles.some(f => f.identifyResult?.detectedType === "invoice" || f.identifyResult?.detectedType === "bill") && (() => {
+                    // Collect AI-detected name suggestions from the batch with fuzzy dedup
+                    const rawNames: string[] = [];
+                    for (const f of confirmedFiles) {
+                      const ir = f.identifyResult;
+                      const ed = f.extractedData;
+                      if (ed?.accountHolderName) rawNames.push(ed.accountHolderName);
+                      if (ir?.invoiceFrom) rawNames.push(ir.invoiceFrom);
+                      if (ir?.invoiceTo) rawNames.push(ir.invoiceTo);
+                      if (ir?.detectedVendor) rawNames.push(ir.detectedVendor);
+                      if (ir?.detectedCustomer) rawNames.push(ir.detectedCustomer);
+                    }
+                    // Fuzzy dedup: strip common suffixes and compare normalized forms
+                    const normalize = (s: string) => s.toLowerCase()
+                      .replace(/\b(b\.?v\.?|n\.?v\.?|ltd\.?|llc\.?|inc\.?|corp\.?|gmbh|s\.?a\.?|s\.?l\.?|s\.?r\.?l\.?|plc\.?|co\.?|pty\.?|pvt\.?)\b/gi, "")
+                      .replace(/[.,\-_&()]/g, " ")
+                      .replace(/\s+/g, " ")
+                      .trim();
+                    const seen = new Map<string, string>(); // normalized → longest original
+                    for (const name of rawNames.filter(Boolean)) {
+                      const norm = normalize(name);
+                      if (!norm) continue;
+                      const existing = seen.get(norm);
+                      // If a normalized match exists, keep the longer (more complete) version
+                      if (!existing || name.length > existing.length) {
+                        seen.set(norm, name);
+                      }
+                      // Also check if one normalized form contains another
+                      let isDuplicate = false;
+                      for (const [existingNorm, existingName] of seen.entries()) {
+                        if (existingNorm === norm) continue;
+                        if (existingNorm.includes(norm) || norm.includes(existingNorm)) {
+                          // Keep the longer one
+                          const longer = name.length >= existingName.length ? name : existingName;
+                          const longerNorm = name.length >= existingName.length ? norm : existingNorm;
+                          const shorterNorm = name.length >= existingName.length ? existingNorm : norm;
+                          seen.delete(shorterNorm);
+                          seen.set(longerNorm, longer);
+                          isDuplicate = true;
+                          break;
+                        }
+                      }
+                      if (!isDuplicate && !seen.has(norm)) {
+                        seen.set(norm, name);
+                      }
+                    }
+                    const uniqueSuggestions = Array.from(seen.values()).slice(0, 5);
+                    
+                    const saveName = async (name: string) => {
+                      if (name && user?.id) {
+                        try {
+                          await updateDoc(doc(db, "users", user.id), { companyName: name });
+                          toast.success(`Company set to "${name}"`);
+                        } catch (err) {
+                          console.error("Failed to save company name:", err);
+                        }
+                      }
+                    };
+                    
+                    return (
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-blue-200 bg-blue-50/80 shrink-0">
+                        <Building2 className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                        <span className="text-[11px] text-blue-800 font-medium shrink-0">Your company?</span>
+                        {uniqueSuggestions.length > 0 ? (
+                          <div className="flex items-center gap-1.5 flex-wrap flex-1 min-w-0">
+                            {uniqueSuggestions.map((name) => (
+                              <button
+                                key={name}
+                                onClick={() => saveName(name)}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-blue-200 text-[10px] font-medium text-blue-700 hover:bg-blue-100 hover:border-blue-300 transition-colors truncate max-w-[160px]"
+                              >
+                                <Sparkles className="h-2.5 w-2.5 shrink-0" />
+                                {name}
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <Input
+                            placeholder="Type company name..."
+                            className="h-6 text-[10px] flex-1 bg-white min-w-[120px]"
+                            onBlur={async (e) => saveName(e.target.value.trim())}
+                            onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                          />
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                {/* AI Detection Summary — two-column layout */}
+                {confirmedFiles.length > 0 && (
+                  <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden shrink-0">
+                    {/* Header */}
                     <div className="px-5 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-3">
                       <div className="p-2 bg-cyan-50 rounded-lg">
                         <Brain className="h-4 w-4 text-cyan-600" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">AI Detection Result</p>
-                        <h3 className="text-sm font-semibold text-slate-900 truncate">{fs.file.name}</h3>
+                        <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">AI Detection Summary</p>
+                        <h3 className="text-sm font-semibold text-slate-900">
+                          {confirmedFiles.length} {confirmedFiles.length === 1 ? "document" : "documents"} identified
+                        </h3>
                       </div>
+                      {avgConfidence >= 0.8 && (
+                        <div className="px-2.5 py-1 bg-emerald-50 border border-emerald-200 rounded-full text-[10px] font-semibold text-emerald-700">
+                          {Math.round(avgConfidence * 100)}% avg confidence
+                        </div>
+                      )}
                     </div>
 
-                    <div className="p-5 space-y-4">
-                      {/* Detection Result */}
-                      <div className="flex items-center gap-4">
-                        <div className="p-3 bg-cyan-50 rounded-xl">
-                          <Icon className="h-7 w-7 text-cyan-600" />
+                    <div className="p-4 space-y-3">
+                      {/* Two-column grid: types + metadata */}
+                      <div className="grid grid-cols-2 gap-3">
+                        {/* Left column: Type breakdown */}
+                        <div className="space-y-2">
+                          <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Document Types</p>
+                          {Object.entries(typeGroups).map(([type, files]) => {
+                            const TypeIcon = typeIcons[type] || FileText;
+                            const canFlipDirection = type === "invoice" || type === "bill";
+                            const flipTarget = type === "invoice" ? "bill" : "invoice";
+                            const flipLabel = type === "invoice" ? "Wrong direction — these are incoming bills (A/P)" : "Wrong direction — these are outgoing invoices (A/R)";
+                            // Get from/to from first file
+                            const firstFile = files[0];
+                            const invoiceFrom = firstFile?.identifyResult?.invoiceFrom;
+                            const invoiceTo = firstFile?.identifyResult?.invoiceTo;
+                            
+                            return (
+                              <div key={type} className="p-2.5 bg-slate-50 rounded-xl">
+                                <div className="flex items-center gap-2.5">
+                                  <div className="p-1.5 bg-white rounded-lg border border-slate-200 shrink-0">
+                                    <TypeIcon className="h-3.5 w-3.5 text-cyan-600" />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-semibold text-slate-900">
+                                      {files.length} × {typeLabels[type] || type}
+                                    </p>
+                                    {type === "bank_statement" && banks.size > 0 && (
+                                      <p className="text-[10px] text-slate-500 truncate">
+                                        {Array.from(banks).join(", ")}
+                                      </p>
+                                    )}
+                                    {(invoiceFrom || invoiceTo) && (
+                                      <p className="text-[10px] text-slate-500 truncate">
+                                        {invoiceFrom && `From: ${invoiceFrom}`}
+                                        {invoiceFrom && invoiceTo && " → "}
+                                        {invoiceTo && `To: ${invoiceTo}`}
+                                      </p>
+                                    )}
+                                  </div>
+                                  <span className="text-[10px] font-mono text-slate-400">
+                                    {Math.round((files.reduce((s, f) => s + (f.identifyResult?.confidence || 0), 0) / files.length) * 100)}%
+                                  </span>
+                                </div>
+                                {/* Flip direction button */}
+                                {canFlipDirection && (
+                                  <button
+                                    onClick={() => {
+                                      // Flip all files of this type to the opposite
+                                      setFileStates(prev => prev.map(f => {
+                                        if (f.status !== "type_confirmed") return f;
+                                        const fType = f.identifyResult?.detectedType;
+                                        if (fType !== type) return f;
+                                        const newMapped = flipTarget as DocumentType;
+                                        return {
+                                          ...f,
+                                          confirmedType: newMapped,
+                                          identifyResult: f.identifyResult ? {
+                                            ...f.identifyResult,
+                                            detectedType: flipTarget,
+                                          } : undefined,
+                                        };
+                                      }));
+                                    }}
+                                    className="mt-1.5 w-full flex items-center justify-center gap-1.5 px-2 py-1 rounded-lg border border-dashed border-slate-300 text-[10px] text-slate-500 hover:border-cyan-400 hover:text-cyan-700 hover:bg-cyan-50 transition-colors"
+                                  >
+                                    <RefreshCw className="h-3 w-3" />
+                                    {flipLabel}
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
-                        <div className="flex-1">
-                          <p className="text-lg font-bold text-slate-900">{typeLabels[fs.identifyResult.detectedType]}</p>
-                          <p className="text-sm text-slate-500">{Math.round(fs.identifyResult.confidence * 100)}% confident</p>
+                        
+                        {/* Right column: Detected metadata */}
+                        <div className="space-y-2">
+                          <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Detected Details</p>
+                          {Array.from(banks).map(b => (
+                            <div key={b} className="flex items-center gap-2.5 p-2.5 bg-slate-50 rounded-xl">
+                              <div className="p-1.5 bg-white rounded-lg border border-slate-200 shrink-0">
+                                <Building2 className="h-3.5 w-3.5 text-slate-500" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-[10px] text-slate-400 font-medium">Bank</p>
+                                <p className="text-sm font-semibold text-slate-900 truncate">{b}</p>
+                              </div>
+                            </div>
+                          ))}
+                          {Array.from(currencies).map(c => (
+                            <div key={c} className="flex items-center gap-2.5 p-2.5 bg-slate-50 rounded-xl">
+                              <div className="p-1.5 bg-white rounded-lg border border-slate-200 shrink-0">
+                                <DollarSign className="h-3.5 w-3.5 text-slate-500" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-[10px] text-slate-400 font-medium">Currency</p>
+                                <p className="text-sm font-semibold text-slate-900">{c}</p>
+                              </div>
+                            </div>
+                          ))}
+                          {banks.size === 0 && currencies.size === 0 && (
+                            <div className="p-2.5 bg-slate-50 rounded-xl text-center">
+                              <p className="text-xs text-slate-400">Details extracted on confirm</p>
+                            </div>
+                          )}
                         </div>
-                        {fs.identifyResult.confidence >= 0.8 && (
-                          <div className="px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-full text-xs font-semibold text-emerald-700">
-                            High confidence
-                          </div>
-                        )}
                       </div>
                       
-                      {/* Details */}
-                      {(fs.identifyResult.detectedBank || fs.identifyResult.detectedVendor || fs.identifyResult.detectedCustomer || fs.identifyResult.currency) && (
-                        <div className="grid grid-cols-2 gap-2">
-                          {fs.identifyResult.detectedBank && (
-                            <div className="flex items-center gap-2.5 p-3 bg-slate-50 rounded-xl">
-                              <Building2 className="h-4 w-4 text-slate-400 shrink-0" />
-                              <div className="min-w-0">
-                                <p className="text-[10px] text-slate-400 uppercase tracking-wider font-medium">Bank</p>
-                                <p className="text-xs font-semibold text-slate-800 truncate">{fs.identifyResult.detectedBank}</p>
-                              </div>
-                            </div>
-                          )}
-                          {fs.identifyResult.detectedVendor && (
-                            <div className="flex items-center gap-2.5 p-3 bg-slate-50 rounded-xl">
-                              <Building2 className="h-4 w-4 text-slate-400 shrink-0" />
-                              <div className="min-w-0">
-                                <p className="text-[10px] text-slate-400 uppercase tracking-wider font-medium">Vendor</p>
-                                <p className="text-xs font-semibold text-slate-800 truncate">{fs.identifyResult.detectedVendor}</p>
-                              </div>
-                            </div>
-                          )}
-                          {fs.identifyResult.detectedCustomer && (
-                            <div className="flex items-center gap-2.5 p-3 bg-slate-50 rounded-xl">
-                              <Building2 className="h-4 w-4 text-slate-400 shrink-0" />
-                              <div className="min-w-0">
-                                <p className="text-[10px] text-slate-400 uppercase tracking-wider font-medium">Customer</p>
-                                <p className="text-xs font-semibold text-slate-800 truncate">{fs.identifyResult.detectedCustomer}</p>
-                              </div>
-                            </div>
-                          )}
-                          {fs.identifyResult.currency && (
-                            <div className="flex items-center gap-2.5 p-3 bg-slate-50 rounded-xl">
-                              <DollarSign className="h-4 w-4 text-slate-400 shrink-0" />
-                              <div>
-                                <p className="text-[10px] text-slate-400 uppercase tracking-wider font-medium">Currency</p>
-                                <p className="text-xs font-semibold text-slate-800">{fs.identifyResult.currency}</p>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      
-                      {/* Reasoning */}
-                      {fs.identifyResult.reasoning && (
-                        <div className="p-3 bg-slate-50 rounded-xl">
-                          <p className="text-[11px] leading-relaxed text-slate-600">
-                            {fs.identifyResult.reasoning}
-                          </p>
-                        </div>
-                      )}
-                      
-                      {/* Actions */}
-                      <div className="flex gap-2 pt-1">
+                      {/* Actions — full width */}
+                      <div className="flex gap-2 pt-2">
                         <Button
                           onClick={() => extractAllFiles()}
                           className="flex-1 bg-slate-900 text-white font-semibold hover:bg-slate-800 transition-all duration-200 h-11"
                         >
                           <Check className="h-4 w-4 mr-2" />
-                          Confirm & Extract
+                          Confirm & Extract {confirmedFiles.length > 1 ? `All ${confirmedFiles.length}` : ""}
                         </Button>
                         <Button
                           variant="outline"
                           onClick={() => {
-                            // TODO: Allow user to change type
                             toast.error("Type override coming soon");
                           }}
                           className="border-slate-200 text-slate-600 font-medium hover:bg-slate-50 hover:text-slate-900 hover:border-slate-300 transition-all duration-200 h-11"
@@ -1618,91 +2199,49 @@ export function UploadDrawer({
                       </div>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
+                )}
+              </div>
+            );
+          })()}
 
           {/* STEP: Extracting (Phase 2) */}
           {currentStep === "extracting" && (
-            <div className="p-5 h-full flex flex-col">
-              {/* AI Thinking Terminal */}
-              {thinkingLines.length > 0 && (
-                <AIThinkingTerminal
-                  lines={thinkingLines}
-                  isRunning={processingFiles.length > 0}
-                  fileName={fileStates[0]?.file.name || "document"}
-                  elapsedMs={elapsedMs}
+            <div className="p-5 h-full flex gap-3 min-h-0">
+              {/* AI Thinking Terminal — fixed 2/3, same height as queue */}
+              <div className="w-2/3 shrink-0 min-w-0 flex flex-col h-full">
+                {thinkingLines.length > 0 && (
+                  <AIThinkingTerminal
+                    lines={thinkingLines}
+                    isRunning={processingFiles.length > 0}
+                    fileName={processingFiles[0]?.file.name || fileStates[0]?.file.name || "document"}
+                    elapsedMs={elapsedMs}
+                  />
+                )}
+              </div>
+              {/* File Queue — fixed 1/3, same height as terminal */}
+              <div className="w-1/3 shrink-0 min-w-0 h-full">
+                <FileQueuePanel 
+                  fileStates={fileStates} 
+                  currentIndex={fileStates.findIndex(f => f.status === "extracting")}
                 />
-              )}
+              </div>
             </div>
           )}
 
-          {/* STEP: Processing (Legacy - keep for now) */}
-          {currentStep === "processing" && (
-            <div className="p-5 h-full flex flex-col">
-              {/* AI Thinking Terminal - this shows all the detail */}
-              {thinkingLines.length > 0 && (
-                <AIThinkingTerminal
-                  lines={thinkingLines}
-                  isRunning={processingFiles.length > 0}
-                  fileName={fileStates[0]?.file.name || "document"}
-                  elapsedMs={elapsedMs}
-                />
-              )}
-
-              {/* Simple file status list - no redundant headers */}
-              {fileStates.length > 0 && (
-                <div className="space-y-2 overflow-y-auto flex-1 min-h-0 mt-4">
-                  {fileStates.map((fs, idx) => (
-                    <div 
-                      key={idx} 
-                      className="flex items-center gap-3 p-3 bg-white border rounded-lg"
-                    >
-                      <div className={cn(
-                        "h-8 w-8 rounded-lg flex items-center justify-center shrink-0",
-                        fs.status === "scanned" && "bg-emerald-100 text-emerald-600",
-                        fs.status === "wrong_type" && "bg-cyan-100 text-cyan-600",
-                        fs.status === "error" && "bg-red-100 text-red-600",
-                        fs.status === "scanning" && "bg-slate-100 text-slate-600",
-                        fs.status === "uploading" && "bg-slate-100 text-slate-600",
-                        fs.status === "pending" && "bg-slate-50 text-slate-400"
-                      )}>
-                        {fs.status === "scanned" && <Check className="h-4 w-4" />}
-                        {fs.status === "wrong_type" && <FileSpreadsheet className="h-4 w-4" />}
-                        {fs.status === "error" && <X className="h-4 w-4" />}
-                        {fs.status === "scanning" && <Loader2 className="h-4 w-4 animate-spin" />}
-                        {fs.status === "uploading" && <Upload className="h-4 w-4" />}
-                        {fs.status === "pending" && <FileText className="h-4 w-4" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-700 truncate">{fs.file.name}</p>
-                        <p className={cn(
-                          "text-xs",
-                          fs.status === "scanned" && "text-emerald-600",
-                          fs.status === "wrong_type" && "text-cyan-600",
-                          fs.status === "error" && "text-red-600",
-                          (fs.status === "pending" || fs.status === "uploading" || fs.status === "scanning") && "text-slate-400"
-                        )}>
-                          {fs.status === "pending" && "Queued"}
-                          {fs.status === "uploading" && "Uploading..."}
-                          {fs.status === "scanning" && "Analyzing..."}
-                          {fs.status === "wrong_type" && "Bank statement detected"}
-                          {fs.status === "scanned" && (
-                            selectedType === "statement" 
-                              ? `${fs.extractedData?.transactionCount || 0} transactions`
-                              : `${fs.extractedData?.currency || 'USD'} ${fs.extractedData?.total?.toLocaleString() || 0}`
-                          )}
-                          {fs.status === "error" && (fs.error || "Failed")}
-                        </p>
-                      </div>
-                      {fs.status === "scanned" && fs.extractedData?.confidence && (
-                        <span className="text-xs text-slate-400">
-                          {Math.round((fs.extractedData.confidence || 0) * 100)}%
-                        </span>
-                      )}
-                    </div>
-                  ))}
+          {/* STEP: Saving to Firestore */}
+          {currentStep === "saving" && (
+            <div className="p-5 h-full flex flex-col items-center justify-center text-center">
+              <div className="h-14 w-14 rounded-2xl bg-cyan-50 flex items-center justify-center mb-4">
+                <Loader2 className="h-7 w-7 text-cyan-600 animate-spin" />
+              </div>
+              <h3 className="text-base font-semibold text-slate-900 mb-1">Saving documents</h3>
+              <p className="text-sm text-slate-500 mb-4">
+                Saving {validScannedFiles.length} {validScannedFiles.length === 1 ? "document" : "documents"} to your account...
+              </p>
+              {savingProgress > 0 && (
+                <div className="w-full max-w-xs">
+                  <Progress value={savingProgress} className="h-2" />
+                  <p className="text-xs text-slate-400 mt-2">{Math.round(savingProgress)}% complete</p>
                 </div>
               )}
             </div>
@@ -1720,78 +2259,84 @@ export function UploadDrawer({
                 </span>
               </div>
 
-              {/* AI Detection Summary Card */}
-              {scannedFiles.length > 0 && scannedFiles[0].extractedData?.detectedType && (
-                <div className="mb-4 shrink-0">
-                  <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-4">
-                    {/* Subtle gradient overlay */}
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-cyan-100/40 to-blue-100/40 rounded-full blur-3xl" />
-                    
-                    <div className="relative">
-                      <div className="flex items-start gap-3">
-                        <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shrink-0">
-                          <Brain className="h-5 w-5 text-white" />
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <h4 className="text-sm font-semibold text-slate-900">AI Detection</h4>
-                            <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-medium">
-                              {Math.round((scannedFiles[0].extractedData.confidence || 0.85) * 100)}% confident
-                            </span>
-                          </div>
-                          <p className="text-xs text-slate-600 mb-3">
-                            {scannedFiles[0].extractedData.detectedType === "bank_statement" && "These appear to be bank statements"}
-                            {scannedFiles[0].extractedData.detectedType === "invoice" && "These appear to be invoices"}
-                            {!["bank_statement", "invoice"].includes(scannedFiles[0].extractedData.detectedType!) && `Detected as: ${scannedFiles[0].extractedData.detectedType}`}
-                          </p>
-                          
-                          {/* Quick stats */}
-                          <div className="grid grid-cols-2 gap-2">
-                            {scannedFiles[0].extractedData.bankName && (
-                              <div className="flex items-center gap-1.5 text-xs">
-                                <Building2 className="h-3 w-3 text-cyan-600" />
-                                <span className="text-slate-600 font-medium">{scannedFiles[0].extractedData.bankName}</span>
-                              </div>
-                            )}
-                            {scannedFiles[0].extractedData.transactionCount && (
-                              <div className="flex items-center gap-1.5 text-xs">
-                                <Zap className="h-3 w-3 text-cyan-600" />
-                                <span className="text-slate-600">{scannedFiles[0].extractedData.transactionCount} transactions</span>
-                              </div>
-                            )}
-                            {scannedFiles[0].extractedData.vendorName && (
-                              <div className="flex items-center gap-1.5 text-xs">
-                                <Building2 className="h-3 w-3 text-cyan-600" />
-                                <span className="text-slate-600 font-medium">{scannedFiles[0].extractedData.vendorName}</span>
-                              </div>
-                            )}
-                            {scannedFiles[0].extractedData.total && (
-                              <div className="flex items-center gap-1.5 text-xs">
-                                <Sparkles className="h-3 w-3 text-cyan-600" />
-                                <span className="text-slate-600 font-medium">
-                                  {scannedFiles[0].extractedData.currency} {scannedFiles[0].extractedData.total.toLocaleString()}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
+              {/* AI Detection Summary Card — handles mixed uploads */}
+              {scannedFiles.length > 0 && (() => {
+                // Build per-type summary
+                const typeCounts: Record<string, { count: number; totalAmount: number; currency: string; totalTxns: number }> = {};
+                scannedFiles.forEach(f => {
+                  const t = f.confirmedType || (f.extractedData?.detectedType === "bank_statement" ? "statement" : f.extractedData?.detectedType) || "statement";
+                  if (!typeCounts[t]) typeCounts[t] = { count: 0, totalAmount: 0, currency: f.extractedData?.currency || "USD", totalTxns: 0 };
+                  typeCounts[t].count++;
+                  typeCounts[t].totalAmount += f.extractedData?.total || 0;
+                  typeCounts[t].totalTxns += f.extractedData?.transactionCount || 0;
+                });
+                const avgConfidence = scannedFiles.reduce((s, f) => s + (f.extractedData?.confidence || 0.85), 0) / scannedFiles.length;
+                const typeLabelsMap: Record<string, string> = { statement: "Bank Statement", invoice: "Invoice (A/R)", bill: "Bill (A/P)" };
+                const typeColors: Record<string, { bg: string; text: string; icon: string }> = {
+                  statement: { bg: "bg-cyan-100", text: "text-cyan-700", icon: "text-cyan-600" },
+                  invoice: { bg: "bg-emerald-100", text: "text-emerald-700", icon: "text-emerald-600" },
+                  bill: { bg: "bg-amber-100", text: "text-amber-700", icon: "text-amber-600" },
+                };
+                const isMixed = Object.keys(typeCounts).length > 1;
+                
+                return (
+                  <div className="mb-4 shrink-0">
+                    <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-4">
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-cyan-100/40 to-blue-100/40 rounded-full blur-3xl" />
                       
-                      {/* Action hint */}
-                      <div className="mt-3 pt-3 border-t border-slate-200 flex items-center justify-between">
-                        <p className="text-[10px] text-slate-500">
-                          {wrongTypeFiles.length > 0 
-                            ? "⚠️ Some files detected as different type — see below"
-                            : "✓ All files match expected type"}
-                        </p>
-                        {wrongTypeFiles.length === 0 && (
+                      <div className="relative">
+                        <div className="flex items-start gap-3">
+                          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shrink-0">
+                            <Brain className="h-5 w-5 text-white" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <h4 className="text-sm font-semibold text-slate-900">AI Detection</h4>
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-medium">
+                                {Math.round(avgConfidence * 100)}% confident
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-600 mb-3">
+                              {isMixed 
+                                ? `Mixed upload: ${Object.entries(typeCounts).map(([t, c]) => `${c.count} ${typeLabelsMap[t] || t}${c.count !== 1 ? "s" : ""}`).join(", ")}`
+                                : `${scannedFiles.length} ${typeLabelsMap[Object.keys(typeCounts)[0]] || "document"}${scannedFiles.length !== 1 ? "s" : ""} detected`
+                              }
+                            </p>
+                            
+                            {/* Per-type breakdown pills */}
+                            <div className="flex flex-wrap gap-2">
+                              {Object.entries(typeCounts).map(([t, info]) => {
+                                const colors = typeColors[t] || { bg: "bg-slate-100", text: "text-slate-700", icon: "text-slate-600" };
+                                return (
+                                  <div key={t} className={cn("flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium", colors.bg, colors.text)}>
+                                    {t === "statement" && <FileSpreadsheet className={cn("h-3 w-3", colors.icon)} />}
+                                    {t === "invoice" && <Receipt className={cn("h-3 w-3", colors.icon)} />}
+                                    {t === "bill" && <FileText className={cn("h-3 w-3", colors.icon)} />}
+                                    {info.count} {typeLabelsMap[t] || t}{info.count !== 1 ? "s" : ""}
+                                    {t === "statement" && info.totalTxns > 0 && (
+                                      <span className="text-[10px] opacity-70 ml-1">~{info.totalTxns} txns</span>
+                                    )}
+                                    {(t === "invoice" || t === "bill") && info.totalAmount > 0 && (
+                                      <span className="text-[10px] opacity-70 ml-1">{info.currency} {info.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="mt-3 pt-3 border-t border-slate-200 flex items-center justify-between">
+                          <p className="text-[10px] text-slate-500">
+                            ✓ All files classified and ready to save
+                          </p>
                           <span className="text-[10px] text-emerald-600 font-medium">Ready to save</span>
-                        )}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
               
               {/* Scrollable content area */}
               <div className="flex-1 overflow-y-auto min-h-0 space-y-4">
@@ -1900,7 +2445,7 @@ export function UploadDrawer({
                           <div className="mt-2 space-y-1">
                             {problemFiles.map((pf, idx) => {
                               const fileIdx = fileStates.findIndex(f => f.file.name === pf.file.name);
-                              const isRetrying = fileStates[fileIdx]?.status === "scanning" || fileStates[fileIdx]?.status === "uploading";
+                              const isRetrying = fileStates[fileIdx]?.status === "extracting" || fileStates[fileIdx]?.status === "uploading";
                               return (
                                 <div key={idx} className="flex items-center justify-between text-xs">
                                   <span className="text-amber-700 flex items-center gap-2">
@@ -1910,7 +2455,6 @@ export function UploadDrawer({
                                   <button
                                     onClick={() => {
                                       if (fileIdx >= 0 && !isRetrying) {
-                                        console.log(`Retrying scan for ${pf.file.name}...`);
                                         identifyFile(pf, fileIdx);
                                       }
                                     }}
@@ -1934,7 +2478,7 @@ export function UploadDrawer({
                   )}
 
                   {/* Account summary for statements - grouped by bank/account */}
-                  {selectedType === "statement" && groupedByAccount.length > 0 && (
+                  {groupedByAccount.length > 0 && (
                     <div className="mb-4 space-y-3">
                     {/* Multi-bank notice */}
                     {hasMultipleBanks && (
@@ -1951,13 +2495,19 @@ export function UploadDrawer({
                         <div key={group.key} className="p-4 bg-slate-50 rounded-xl border">
                         <div className="flex items-center gap-2 mb-3">
                           <div className={cn(
-                            "h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold",
-                            groupIdx === 0 && "bg-cyan-100 text-cyan-700",
-                            groupIdx === 1 && "bg-purple-100 text-purple-700",
-                            groupIdx === 2 && "bg-amber-100 text-amber-700",
-                            groupIdx >= 3 && "bg-slate-200 text-slate-600"
+                            "h-6 w-6 rounded-full flex items-center justify-center",
+                            groupIdx === 0 && "bg-cyan-100",
+                            groupIdx === 1 && "bg-purple-100",
+                            groupIdx === 2 && "bg-amber-100",
+                            groupIdx >= 3 && "bg-slate-200"
                           )}>
-                            {groupIdx + 1}
+                            <Building2 className={cn(
+                              "h-3.5 w-3.5",
+                              groupIdx === 0 && "text-cyan-600",
+                              groupIdx === 1 && "text-purple-600",
+                              groupIdx === 2 && "text-amber-600",
+                              groupIdx >= 3 && "text-slate-500"
+                            )} />
                           </div>
                           <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
                             {group.files.length} Statement{group.files.length !== 1 ? "s" : ""}
@@ -2031,6 +2581,76 @@ export function UploadDrawer({
                         </div>
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {/* Invoice summary */}
+                {invoiceFiles.length > 0 && (
+                  <div className="mb-4 p-4 bg-emerald-50 rounded-xl border border-emerald-200">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="h-6 w-6 rounded-full bg-emerald-100 flex items-center justify-center">
+                        <Receipt className="h-3.5 w-3.5 text-emerald-600" />
+                      </div>
+                      <span className="text-xs font-medium text-emerald-700 uppercase tracking-wider">
+                        {invoiceFiles.length} Invoice{invoiceFiles.length !== 1 ? "s" : ""}
+                      </span>
+                    </div>
+                    <div className="space-y-1.5">
+                      {invoiceFiles.slice(0, 5).map((f, idx) => (
+                        <div key={idx} className="flex justify-between text-xs">
+                          <span className="text-slate-600 truncate max-w-[60%]">{f.extractedData?.customerName || f.file.name}</span>
+                          <span className="font-medium text-slate-700">
+                            {f.extractedData?.currency || "USD"} {(f.extractedData?.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      ))}
+                      {invoiceFiles.length > 5 && (
+                        <div className="text-[10px] text-slate-400 pt-1">
+                          + {invoiceFiles.length - 5} more invoices
+                        </div>
+                      )}
+                      <div className="pt-2 border-t border-emerald-200 flex justify-between">
+                        <span className="text-sm text-slate-500">Total</span>
+                        <span className="text-sm font-semibold text-emerald-600">
+                          {(invoiceFiles.reduce((sum, f) => sum + (f.extractedData?.total || 0), 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Bills summary */}
+                {billFiles.length > 0 && (
+                  <div className="mb-4 p-4 bg-amber-50 rounded-xl border border-amber-200">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="h-6 w-6 rounded-full bg-amber-100 flex items-center justify-center">
+                        <FileText className="h-3.5 w-3.5 text-amber-600" />
+                      </div>
+                      <span className="text-xs font-medium text-amber-700 uppercase tracking-wider">
+                        {billFiles.length} Bill{billFiles.length !== 1 ? "s" : ""}
+                      </span>
+                    </div>
+                    <div className="space-y-1.5">
+                      {billFiles.slice(0, 5).map((f, idx) => (
+                        <div key={idx} className="flex justify-between text-xs">
+                          <span className="text-slate-600 truncate max-w-[60%]">{f.extractedData?.vendorName || f.file.name}</span>
+                          <span className="font-medium text-slate-700">
+                            {f.extractedData?.currency || "USD"} {(f.extractedData?.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      ))}
+                      {billFiles.length > 5 && (
+                        <div className="text-[10px] text-slate-400 pt-1">
+                          + {billFiles.length - 5} more bills
+                        </div>
+                      )}
+                      <div className="pt-2 border-t border-amber-200 flex justify-between">
+                        <span className="text-sm text-slate-500">Total</span>
+                        <span className="text-sm font-semibold text-amber-600">
+                          {(billFiles.reduce((sum, f) => sum + (f.extractedData?.total || 0), 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 )}
 
@@ -2271,15 +2891,15 @@ export function UploadDrawer({
                       >
                       <div className={cn(
                         "h-6 w-6 rounded flex items-center justify-center shrink-0",
-                        fs.status === "scanned" && "bg-emerald-100 text-emerald-600",
+                        fs.status === "extracted" && "bg-emerald-100 text-emerald-600",
                         fs.status === "error" && "bg-red-100 text-red-600"
                       )}>
-                        {fs.status === "scanned" && <Check className="h-3.5 w-3.5" />}
+                        {fs.status === "extracted" && <Check className="h-3.5 w-3.5" />}
                         {fs.status === "error" && <X className="h-3.5 w-3.5" />}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-slate-700 truncate">{fs.file.name}</p>
-                        {fs.status === "scanned" && fs.extractedData && (
+                        {fs.status === "extracted" && fs.extractedData && (
                           <p className="text-xs text-slate-400">
                             {selectedType === "statement" 
                               ? `${fs.extractedData.periodStart || ''} • ${fs.extractedData.transactionCount} txns`
@@ -2291,7 +2911,7 @@ export function UploadDrawer({
                           <p className="text-xs text-red-500">{fs.error}</p>
                         )}
                       </div>
-                      {fs.status === "scanned" && (
+                      {fs.status === "extracted" && (
                         expandedFileIndex === idx 
                           ? <ChevronDown className="h-4 w-4 text-slate-400" />
                           : <ChevronRight className="h-4 w-4 text-slate-400" />
@@ -2305,7 +2925,7 @@ export function UploadDrawer({
                     </div>
 
                     {/* Expanded details - adapts to document type */}
-                    {expandedFileIndex === idx && fs.status === "scanned" && fs.extractedData && (
+                    {expandedFileIndex === idx && fs.status === "extracted" && fs.extractedData && (
                       <div className="px-3 pb-3 border-t bg-slate-50">
                         <div className="grid grid-cols-2 gap-2 pt-2 text-xs">
                           {selectedType === "statement" ? (
@@ -2425,14 +3045,20 @@ export function UploadDrawer({
                   <CheckCircle2 className="h-8 w-8 text-emerald-600" />
                 </div>
                 <h3 className="text-lg font-semibold text-slate-900 mb-1">
-                  {savedCount} {getDocTypeName(selectedType, savedCount)} Saved!
+                  {savedCount} Document{savedCount !== 1 ? "s" : ""} Saved!
                 </h3>
                 <p className="text-sm text-slate-500 mb-2">
-                  {selectedType === "statement" 
+                  {statementFiles.length > 0 && invoiceFiles.length === 0 && billFiles.length === 0
                     ? (groupedByAccount.length > 1 
-                        ? `Saved to ${groupedByAccount.length} accounts • Extracting transactions...`
-                        : "Transaction extraction is running in the background")
-                    : `Your ${getDocTypeName(selectedType, savedCount).toLowerCase()} ${savedCount !== 1 ? "are" : "is"} ready for review`
+                        ? `${statementFiles.length} statements saved to ${groupedByAccount.length} accounts • Full transaction import running in background`
+                        : `${statementFiles.length} statement${statementFiles.length !== 1 ? "s" : ""} saved • Full transaction import running in background`)
+                    : statementFiles.length === 0 
+                      ? `Your ${getDocTypeName(selectedType, savedCount).toLowerCase()} ${savedCount !== 1 ? "are" : "is"} ready for review`
+                      : [
+                          statementFiles.length > 0 ? `${statementFiles.length} statement${statementFiles.length !== 1 ? "s" : ""} (importing in background)` : "",
+                          invoiceFiles.length > 0 ? `${invoiceFiles.length} invoice${invoiceFiles.length !== 1 ? "s" : ""}` : "",
+                          billFiles.length > 0 ? `${billFiles.length} bill${billFiles.length !== 1 ? "s" : ""}` : "",
+                        ].filter(Boolean).join(", ")
                   }
                 </p>
                 {skippedCount > 0 && (
@@ -2502,7 +3128,7 @@ export function UploadDrawer({
               </div>
             </div>
             <p className="text-[10px] text-slate-400 text-center">
-              Powered by Google Gemini 3 Flash with multimodal vision
+              Powered by Google Gemini 3 Pro with multimodal vision
             </p>
           </div>
         )}
@@ -2547,13 +3173,13 @@ export function UploadDrawer({
           </div>
         )}
 
-        {/* Footer - Processing step */}
-        {currentStep === "processing" && (
+        {/* Footer - Saving step */}
+        {currentStep === "saving" && (
           <div className="px-5 py-4 border-t shrink-0 bg-white">
             <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
               <Loader2 className="h-4 w-4 text-cyan-600 animate-spin" />
               <span className="text-xs font-semibold text-slate-900">
-                {scannedFiles.length} / {fileStates.length}
+                Saving to Firestore...
               </span>
             </div>
           </div>
@@ -2639,7 +3265,7 @@ export function UploadDrawer({
                   disabled={validScannedFiles.length === 0}
                 >
                   <Check className="h-4 w-4 mr-2" />
-                  Save {validScannedFiles.length} {getDocTypeName(selectedType, validScannedFiles.length)}
+                  Save {validScannedFiles.length} Document{validScannedFiles.length !== 1 ? "s" : ""}
                 </Button>
               )}
             </div>

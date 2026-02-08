@@ -38,7 +38,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { ExportDialog } from "@/components/export";
-import { UploadDrawer } from "@/components/upload/upload-drawer";
+import { useUploadState } from "@/hooks/use-upload-state";
 import { searchTransactions } from "@/lib/algolia";
 import type { Transaction, BankAccount } from "@/types";
 
@@ -305,11 +305,11 @@ function TransactionsEmptyState({ onUpload }: { onUpload: () => void }) {
 
 export default function TransactionsPage() {
   const { user } = useAuth();
+  const { openDrawer: openUploadDrawer } = useUploadState();
   const [transactions, setTransactions] = useState<TransactionWithAccount[]>([]);
   const [accounts, setAccounts] = useState<BankAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-  const [uploadModalOpen, setUploadModalOpen] = useState(false);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState("");
@@ -732,7 +732,7 @@ export default function TransactionsPage() {
       <div className="flex flex-col h-full bg-slate-50">
         <Header title="Transactions" />
         <div className="flex-1 p-4 overflow-hidden flex flex-col">
-          <TransactionsEmptyState onUpload={() => setUploadModalOpen(true)} />
+          <TransactionsEmptyState onUpload={() => openUploadDrawer("statement")} />
         </div>
         <ExportDialog
           open={showExportDialog}
@@ -993,12 +993,6 @@ export default function TransactionsPage() {
         onExport={handleSmartExport}
       />
 
-      {/* Upload Drawer */}
-      <UploadDrawer
-        open={uploadModalOpen}
-        onOpenChange={setUploadModalOpen}
-        defaultType="statement"
-      />
     </div>
   );
 }

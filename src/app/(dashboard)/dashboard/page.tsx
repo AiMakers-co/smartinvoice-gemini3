@@ -334,9 +334,13 @@ export default function DashboardPage() {
             <div>
               <h1 className="text-xl font-semibold text-slate-900">{getGreeting()}, {userName}</h1>
               <p className="text-sm text-slate-500 mt-0.5">
+                {(user as any)?.companyName && (
+                  <span className="font-medium text-slate-700">{(user as any).companyName}</span>
+                )}
+                {(user as any)?.companyName && stats.totalTransactions > 0 && " — "}
                 {stats.totalTransactions > 0
                   ? `${stats.totalTransactions.toLocaleString()} transactions across ${stats.totalAccounts} accounts`
-                  : "Upload a bank statement to get started"}
+                  : (user as any)?.companyName ? "" : "Upload a bank statement to get started"}
               </p>
             </div>
             <div className="flex items-center gap-2 border border-slate-200 rounded-lg px-3 py-2">

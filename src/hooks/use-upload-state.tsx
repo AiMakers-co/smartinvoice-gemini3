@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useRef, ReactNode } from "react";
 
 // Types
 export type DocumentType = "statement" | "invoice" | "bill";
@@ -74,16 +74,18 @@ interface ExtractedData {
 export interface FileUploadState {
   file: File;
   fileUrl?: string;
-  status: "pending" | "uploading" | "identifying" | "type_confirmed" | "extracting" | "extracted" | "error" | "scanning" | "scanned" | "wrong_type" | "needs_rules_confirmation";
+  status: "pending" | "uploading" | "identifying" | "type_confirmed" | "extracting" | "extracted" | "error" | "scanning" | "scanned" | "wrong_type" | "needs_rules_confirmation" | "rejected";
   error?: string;
   
-  // Phase 1: Type identification (NEW)
+  // Phase 1: Type identification
   identifyResult?: {
     detectedType: string;
     confidence: number;
     detectedBank?: string;
     detectedVendor?: string;
     detectedCustomer?: string;
+    invoiceFrom?: string;   // Company that issued the document
+    invoiceTo?: string;     // Company that received / must pay
     currency?: string;
     reasoning: string;
   };
@@ -94,7 +96,7 @@ export interface FileUploadState {
   suggestedType?: DocumentType;
 }
 
-type DrawerStep = "upload" | "identifying" | "confirm_type" | "extracting" | "processing" | "preview" | "complete";
+type DrawerStep = "upload" | "identifying" | "confirm_type" | "extracting" | "saving" | "preview" | "complete";
 
 interface UploadState {
   fileStates: FileUploadState[];
@@ -113,6 +115,12 @@ interface UploadStateContextType {
   setSkippedCount: (count: number) => void;
   resetState: () => void;
   hasUnsavedData: boolean;
+  // Drawer open/close control (persists across page navigation)
+  isDrawerOpen: boolean;
+  openDrawer: (type?: DocumentType) => void;
+  closeDrawer: () => void;
+  // Completion callback registration
+  onCompleteRef: React.MutableRefObject<(() => void) | null>;
 }
 
 const initialState: UploadState = {
@@ -127,42 +135,49 @@ const UploadStateContext = createContext<UploadStateContextType | undefined>(und
 
 export function UploadStateProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<UploadState>(initialState);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const onCompleteRef = useRef<(() => void) | null>(null);
 
-  const setFileStates = (files: FileUploadState[] | ((prev: FileUploadState[]) => FileUploadState[])) => {
+  const setFileStates = useCallback((files: FileUploadState[] | ((prev: FileUploadState[]) => FileUploadState[])) => {
     setState(prev => {
       const newFileStates = typeof files === "function" ? files(prev.fileStates) : files;
-      console.log("=== CONTEXT setFileStates ===");
-      console.log("New fileStates count:", newFileStates.length);
-      newFileStates.forEach((f, i) => {
-        console.log(`File ${i}: status=${f.status}, bankName=${f.extractedData?.bankName || "N/A"}`);
-      });
-      console.log("=============================");
       return {
         ...prev,
         fileStates: newFileStates,
       };
     });
-  };
+  }, []);
 
-  const setStep = (step: DrawerStep) => {
+  const setStep = useCallback((step: DrawerStep) => {
     setState(prev => ({ ...prev, step }));
-  };
+  }, []);
 
-  const setSelectedType = (selectedType: DocumentType) => {
+  const setSelectedType = useCallback((selectedType: DocumentType) => {
     setState(prev => ({ ...prev, selectedType }));
-  };
+  }, []);
 
-  const setSavedCount = (savedCount: number) => {
+  const setSavedCount = useCallback((savedCount: number) => {
     setState(prev => ({ ...prev, savedCount }));
-  };
+  }, []);
 
-  const setSkippedCount = (skippedCount: number) => {
+  const setSkippedCount = useCallback((skippedCount: number) => {
     setState(prev => ({ ...prev, skippedCount }));
-  };
+  }, []);
 
-  const resetState = () => {
+  const resetState = useCallback(() => {
     setState(initialState);
-  };
+  }, []);
+
+  const openDrawer = useCallback((type?: DocumentType) => {
+    if (type) {
+      setState(prev => ({ ...prev, selectedType: type }));
+    }
+    setIsDrawerOpen(true);
+  }, []);
+
+  const closeDrawer = useCallback(() => {
+    setIsDrawerOpen(false);
+  }, []);
 
   const hasUnsavedData = state.fileStates.some(f => f.status === "scanned" && f.extractedData);
 
@@ -177,6 +192,10 @@ export function UploadStateProvider({ children }: { children: ReactNode }) {
         setSkippedCount,
         resetState,
         hasUnsavedData,
+        isDrawerOpen,
+        openDrawer,
+        closeDrawer,
+        onCompleteRef,
       }}
     >
       {children}

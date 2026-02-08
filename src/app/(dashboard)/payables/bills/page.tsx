@@ -40,7 +40,6 @@ import {
 } from "@/components/ui/dialog";
 import {
   FileSpreadsheet,
-  Upload,
   Search,
   MoreHorizontal,
   Eye,
@@ -53,7 +52,7 @@ import {
 } from "lucide-react";
 import { IncomingBill } from "@/types/documents";
 import { Header } from "@/components/layout/header";
-import { UploadDrawer } from "@/components/upload/upload-drawer";
+import { useUploadState } from "@/hooks/use-upload-state";
 
 // ============================================
 // HELPERS
@@ -154,8 +153,8 @@ export default function PayablesBillsPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [sortBy, setSortBy] = useState<string>("date-desc");
   
-  // Upload modal state
-  const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  // Upload
+  const { openDrawer: openUploadDrawer } = useUploadState();
   
   // Duplicate management state
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
@@ -318,7 +317,7 @@ export default function PayablesBillsPage() {
             <p className="text-xs text-slate-500">{bills.length} bill{bills.length !== 1 ? 's' : ''} uploaded</p>
           </div>
           <Button 
-            onClick={() => setUploadModalOpen(true)}
+            onClick={() => openUploadDrawer("bill")}
             className="bg-orange-600 hover:bg-orange-700"
           >
             <Plus className="h-4 w-4 mr-2" />
@@ -523,16 +522,6 @@ export default function PayablesBillsPage() {
           </Card>
         )}
       </div>
-
-      {/* Upload Drawer */}
-      <UploadDrawer
-        open={uploadModalOpen}
-        onOpenChange={setUploadModalOpen}
-        defaultType="bill"
-        onUploadComplete={() => {
-          // Drawer handles its own close timing
-        }}
-      />
 
       {/* Duplicate Management Dialog */}
       <Dialog open={duplicateDialogOpen} onOpenChange={setDuplicateDialogOpen}>

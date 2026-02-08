@@ -54,6 +54,7 @@ import { FinancialChatPanel } from "@/components/financial-chat";
 import { Analytics } from "@/components/analytics/AnalyticsProvider";
 import { DemoModeProvider } from "@/hooks/use-demo-mode";
 import { UploadStateProvider } from "@/hooks/use-upload-state";
+import { UploadDrawer } from "@/components/upload/upload-drawer";
 
 function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -131,17 +132,21 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
         <Sidebar />
         {/* Main area - FULL WIDTH. Do NOT add max-w-* to pages! */}
         <main className="flex-1 overflow-auto flex flex-col">
-          {/* Global processing indicator */}
-          <ProcessingBanner />
           {/* Page content */}
           <div className="flex-1 overflow-auto">{children}</div>
         </main>
+        
+        {/* Global processing indicator — fixed bottom bar */}
+        <ProcessingBanner />
         
         {/* AI Assistant Sidebar */}
         <AIAssistantSidebar />
         
         {/* Financial Chat Panel — "Ask SmartInvoice" */}
         <FinancialChatPanel />
+        
+        {/* Global Upload Drawer — persists across page navigation */}
+        <UploadDrawer />
       </div>
     </AIAssistantProvider>
   );

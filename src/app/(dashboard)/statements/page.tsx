@@ -39,7 +39,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { UploadDrawer } from "@/components/upload/upload-drawer";
+import { useUploadState } from "@/hooks/use-upload-state";
 import type { Statement, BankAccount } from "@/types";
 
 // ============================================
@@ -370,12 +370,12 @@ function StatementsEmptyState({ onUpload }: { onUpload: () => void }) {
 export default function StatementsPage() {
   const router = useRouter();
   const { user } = useAuth();
+  const { openDrawer: openUploadDrawer } = useUploadState();
   const [statements, setStatements] = useState<StatementWithAccount[]>([]);
   const [accounts, setAccounts] = useState<Record<string, BankAccount>>({});
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
-  const [uploadModalOpen, setUploadModalOpen] = useState(false);
 
   // Load statements & accounts together
   useEffect(() => {
@@ -496,7 +496,7 @@ export default function StatementsPage() {
             <div className="animate-spin h-6 w-6 border-2 border-blue-500 border-t-transparent rounded-full" />
           </div>
         ) : statements.length === 0 ? (
-          <StatementsEmptyState onUpload={() => setUploadModalOpen(true)} />
+          <StatementsEmptyState onUpload={() => openUploadDrawer("statement")} />
         ) : (
           <div className="space-y-4">
             {/* Compact Summary Bar */}
@@ -519,7 +519,7 @@ export default function StatementsPage() {
                   <div className="text-base font-bold">{formatFileSize(totalSize) || "—"}</div>
                 </div>
                 <div className="px-3 py-2">
-                  <Button size="sm" onClick={() => setUploadModalOpen(true)}>
+                  <Button size="sm" onClick={() => openUploadDrawer("statement")}>
                     <Plus className="h-3.5 w-3.5 mr-1" />
                     Upload
                   </Button>
@@ -590,13 +590,6 @@ export default function StatementsPage() {
           </div>
         )}
       </div>
-
-      {/* Upload Drawer */}
-      <UploadDrawer
-        open={uploadModalOpen}
-        onOpenChange={setUploadModalOpen}
-        defaultType="statement"
-      />
     </div>
   );
 }

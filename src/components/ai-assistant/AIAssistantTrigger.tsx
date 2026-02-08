@@ -77,36 +77,40 @@ export function AIAssistantTrigger({ className, variant = "floating" }: AIAssist
       onClick={toggleSidebar}
       className={cn(
         "fixed bottom-6 right-6 z-30",
-        "h-14 w-14 rounded-full",
-        "bg-gradient-to-br from-violet-500 to-purple-600",
-        "shadow-lg shadow-violet-500/30",
-        "flex items-center justify-center",
-        "hover:shadow-xl hover:shadow-violet-500/40 hover:scale-105",
+        "flex items-center gap-2.5 rounded-2xl",
+        "bg-gradient-to-br from-violet-500 via-purple-600 to-indigo-600",
+        "shadow-lg shadow-purple-500/25",
+        "pl-4 pr-5 py-3",
+        "hover:shadow-xl hover:shadow-purple-500/35 hover:scale-[1.03]",
+        "active:scale-[0.97]",
         "transition-all duration-200",
         "group",
-        state.isOpen && "scale-0 opacity-0",
+        state.isOpen && "scale-0 opacity-0 pointer-events-none",
         className
       )}
     >
-      <Sparkles className="h-6 w-6 text-white group-hover:scale-110 transition-transform" />
-      
+      {/* Icon with glow */}
+      <div className="relative flex items-center justify-center">
+        <Sparkles className="h-5 w-5 text-white group-hover:scale-110 transition-transform duration-200" />
+        <div className="absolute inset-0 h-5 w-5 bg-white/20 rounded-full blur-sm group-hover:blur-md transition-all" />
+      </div>
+
+      {/* Label */}
+      <span className="text-sm font-semibold text-white whitespace-nowrap">
+        Chat with your data
+      </span>
+
       {/* Notification badge */}
       {unresolvedIssues > 0 && (
-        <span className="absolute -top-1 -right-1 h-5 min-w-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-medium flex items-center justify-center">
+        <span className="ml-0.5 h-5 min-w-5 px-1.5 rounded-full bg-white/20 text-white text-[10px] font-bold flex items-center justify-center backdrop-blur-sm">
           {unresolvedIssues}
         </span>
       )}
 
-      {/* Pulse animation when there are issues */}
+      {/* Pulse ring when there are issues */}
       {unresolvedIssues > 0 && (
-        <span className="absolute inset-0 rounded-full bg-violet-500 animate-ping opacity-20" />
+        <span className="absolute inset-0 rounded-2xl bg-violet-400 animate-ping opacity-15" />
       )}
-
-      {/* Tooltip */}
-      <span className="absolute right-full mr-3 px-2 py-1 rounded bg-slate-900 text-white text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-        AI Assistant
-        {unresolvedIssues > 0 && ` (${unresolvedIssues} issues)`}
-      </span>
     </button>
   );
 }

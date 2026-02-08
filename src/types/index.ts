@@ -135,6 +135,10 @@ export interface User {
   createdAt: Timestamp;
   lastLoginAt?: Timestamp;
   
+  // Company identity — used by AI to determine invoice direction (A/R vs A/P)
+  companyName?: string;
+  companyAliases?: string[]; // Other names found on bank statements, trade names, etc.
+  
   // Authentication providers
   authProviders?: AuthProviderInfo[];
   lastAuthProvider?: AuthProvider;

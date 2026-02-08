@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 import { Transaction } from "@/types";
 import { IncomingBill } from "@/types/documents";
 import { Header } from "@/components/layout/header";
-import { UploadDrawer } from "@/components/upload/upload-drawer";
+import { useUploadState } from "@/hooks/use-upload-state";
 
 // ============================================
 // HELPERS
@@ -163,7 +163,7 @@ export default function PayablesOverviewPage() {
   const [unpaidBills, setUnpaidBills] = useState<IncomingBill[]>([]);
   const [recentDebits, setRecentDebits] = useState<Transaction[]>([]);
   const [selectedDebit, setSelectedDebit] = useState<string | null>(null);
-  const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const { openDrawer: openUploadDrawer } = useUploadState();
 
   // Stats
   const [allBills, setAllBills] = useState<IncomingBill[]>([]);
@@ -274,7 +274,7 @@ export default function PayablesOverviewPage() {
             <p className="text-xs text-slate-500">Track payments to your vendors</p>
           </div>
           <Button 
-            onClick={() => setUploadModalOpen(true)}
+            onClick={() => openUploadDrawer("bill")}
             className="bg-orange-600 hover:bg-orange-700"
           >
             <Plus className="h-4 w-4 mr-2" />
@@ -433,15 +433,6 @@ export default function PayablesOverviewPage() {
         </div>
       </div>
 
-      {/* Upload Drawer */}
-      <UploadDrawer
-        open={uploadModalOpen}
-        onOpenChange={setUploadModalOpen}
-        defaultType="bill"
-        onUploadComplete={() => {
-          // Drawer handles its own close timing
-        }}
-      />
     </div>
   );
 }

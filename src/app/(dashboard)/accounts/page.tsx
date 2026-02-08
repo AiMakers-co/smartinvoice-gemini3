@@ -51,7 +51,7 @@ import { Progress } from "@/components/ui/progress";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { UploadDrawer } from "@/components/upload/upload-drawer";
+import { useUploadState } from "@/hooks/use-upload-state";
 import type { BankAccount, Statement, Transaction } from "@/types";
 
 // ============================================
@@ -159,7 +159,7 @@ function AccountCard({ account, recentActivity, reconStats, isProcessing, proces
           <div className="flex items-center gap-2 mb-3 px-2.5 py-1.5 bg-cyan-50 border border-cyan-200 rounded-lg">
             <Loader2 className="h-3 w-3 text-cyan-600 animate-spin" />
             <span className="text-[10px] font-medium text-cyan-700">
-              Extracting from {processingCount} statement{processingCount !== 1 ? 's' : ''}...
+              Importing transactions from {processingCount} statement{processingCount !== 1 ? 's' : ''}...
             </span>
           </div>
         )}
@@ -658,8 +658,8 @@ export default function AccountsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<string>("all");
   
-  // Upload modal state
-  const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  // Upload drawer (context-based)
+  const { openDrawer: openUploadDrawer, onCompleteRef } = useUploadState();
   const [uploadForAccountId, setUploadForAccountId] = useState<string | null>(null);
   
   // Edit dialog state
@@ -689,6 +689,11 @@ export default function AccountsPage() {
   const handleUploadComplete = useCallback(() => {
     showToast("success", "Statement processed successfully");
   }, []);
+
+  useEffect(() => {
+    onCompleteRef.current = handleUploadComplete;
+    return () => { onCompleteRef.current = null; };
+  }, [handleUploadComplete, onCompleteRef]);
   
   const showToast = (type: Toast["type"], message: string) => {
     const id = Math.random().toString(36).substr(2, 9);
@@ -987,7 +992,7 @@ export default function AccountsPage() {
             ))}
           </div>
         ) : accounts.length === 0 ? (
-          <EmptyState onUpload={() => setUploadModalOpen(true)} />
+          <EmptyState onUpload={() => openUploadDrawer("statement")} />
         ) : (
           <div className="space-y-5">
             {/* Header Row */}
@@ -997,7 +1002,7 @@ export default function AccountsPage() {
                 <p className="text-sm text-slate-500">{accounts.length} account{accounts.length !== 1 ? 's' : ''} connected</p>
               </div>
               <Button 
-                onClick={() => { setUploadForAccountId(null); setUploadModalOpen(true); }}
+                onClick={() => { setUploadForAccountId(null); openUploadDrawer("statement"); }}
                 size="sm"
               >
                 <Plus className="h-4 w-4 mr-1.5" />
@@ -1091,7 +1096,7 @@ export default function AccountsPage() {
                   onSelect={() => router.push(`/accounts/${account.id}`)}
                   onEdit={() => handleEditAccount(account)}
                   onArchive={() => handleArchiveAccount(account)}
-                  onUpload={() => { setUploadForAccountId(account.id); setUploadModalOpen(true); }}
+                  onUpload={() => { setUploadForAccountId(account.id); openUploadDrawer("statement"); }}
                 />
               ))}
             </div>
@@ -1282,17 +1287,6 @@ export default function AccountsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Upload Drawer */}
-      <UploadDrawer
-        open={uploadModalOpen}
-        onOpenChange={(open) => { 
-          setUploadModalOpen(open); 
-          if (!open) setUploadForAccountId(null); 
-        }}
-        defaultType="statement"
-        onUploadComplete={handleUploadComplete}
-      />
 
       {/* Toast Notifications */}
       {toasts.length > 0 && (

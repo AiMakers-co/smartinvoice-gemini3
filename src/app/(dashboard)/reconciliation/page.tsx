@@ -61,7 +61,7 @@ import { cn } from "@/lib/utils";
 import { Transaction } from "@/types";
 import { OutgoingInvoice, IncomingBill } from "@/types/documents";
 import { Header } from "@/components/layout/header";
-import { UploadDrawer, DocumentType } from "@/components/upload/upload-drawer";
+import { useUploadState } from "@/hooks/use-upload-state";
 
 // ============================================
 // TYPES
@@ -144,6 +144,53 @@ function formatFullDate(timestamp: Timestamp | undefined) {
   if (!timestamp) return "-";
   const date = timestamp.toDate();
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(date);
+}
+
+// Extract a human-readable entity name from a bank transaction description
+function extractEntityName(description: string): string | null {
+  if (!description) return null;
+  const desc = description.trim();
+  
+  // Pattern: "Incoming Instant Payment ... <BANK> <ENTITY NAME> ACCTNUM..."
+  const incomingMatch = desc.match(/(?:ORBACWCU|MCBKCWCU|CMBAAWAX)\s+(.+?)(?:\s+ACCTNUM|\s+(?:INV|S\d))/i);
+  if (incomingMatch) return cleanEntityName(incomingMatch[1]);
+  
+  // Pattern: "Internet Transfer Credit <ENTITY>"
+  const transferMatch = desc.match(/Internet Transfer Credit\s+(.+?)$/i);
+  if (transferMatch) return cleanEntityName(transferMatch[1]);
+  
+  // Pattern: "Inward SWIFT Payment ... <ENTITY NAME> ... DBA ..."
+  const swiftInMatch = desc.match(/Inward SWIFT Payment\s+\/\d+\s+(.+?)(?:\s+DBA|\s+SW-)/i);
+  if (swiftInMatch) return cleanEntityName(swiftInMatch[1]);
+  
+  // Pattern: "Outward SWIFT Payment <ENTITY>"
+  const swiftOutMatch = desc.match(/(?:Outward SWIFT|WireTfr Debit).+?(?:MOBILEWEB|ILEWEB)\s+(.+?)\s+\d/i);
+  if (swiftOutMatch) return cleanEntityName(swiftOutMatch[1]);
+  
+  // Pattern: "InternetBanking ... Mark Austen ..."  
+  const wireMatch = desc.match(/WireTfr Debit.+?(?:MOBILEWEB|ILEWEB)\s+([A-Z][a-z]+\s+[A-Z][a-z]+)/i);
+  if (wireMatch) return cleanEntityName(wireMatch[1]);
+  
+  // Pattern: "OVERHEID CURACAO LANDSONTVANGER"
+  if (desc.includes("OVERHEID CURACAO") || desc.includes("LANDSONTVANGER")) return "Overheid Curaçao (Tax)";
+  
+  return null;
+}
+
+function cleanEntityName(name: string): string {
+  return name
+    .replace(/\s+(N\.?V\.?|B\.?V\.?|LLC|INC|LTD|CORP)\.?\s*$/i, (m) => ` ${m.trim()}`)
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .map(w => w.length <= 3 ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ");
+}
+
+// Truncate a long bank description for display
+function truncateDescription(desc: string, maxLen: number = 80): string {
+  if (!desc || desc.length <= maxLen) return desc;
+  return desc.slice(0, maxLen).trim() + "…";
 }
 
 // ============================================
@@ -468,23 +515,31 @@ function TransactionRow({
   const isPaymentMatch = match?.classification === "payment_match" && !match.autoConfirmed;
   const isAutoConfirmed = match?.autoConfirmed;
 
+  // Resolve "Unknown" counterparty — extract from description if needed
+  const displayCounterparty = match?.counterpartyName && match.counterpartyName !== "Unknown" && match.counterpartyName !== "null"
+    ? match.counterpartyName
+    : extractEntityName(transaction.description || "") || null;
+  
+  const hasLinkedDocument = match?.documentId != null;
+  const displayDocNumber = match?.documentNumber || null;
+
   return (
     <div className={cn(
       "border-b last:border-0 transition-colors",
       isMatched && "bg-emerald-50/30",
       isAutoConfirmed && "bg-emerald-50/30",
-      isBankFee && "bg-slate-50/50 opacity-70",
-      isTransfer && "bg-slate-50/50 opacity-70",
-      isPaymentMatch && match.confidence >= 80 && "bg-purple-50/20",
-      isPaymentMatch && match.confidence < 80 && "bg-amber-50/20",
+      isBankFee && "bg-slate-50/50 opacity-60",
+      isTransfer && "bg-slate-50/50 opacity-60",
+      isPaymentMatch && "hover:bg-slate-50/50",
     )}>
-      <div className="flex items-start gap-3 px-4 py-3">
+      <div className="flex items-center gap-3 px-4 py-3">
+        {/* Icon */}
         <div className={cn(
-          "h-9 w-9 rounded-lg flex items-center justify-center shrink-0 mt-0.5",
-          isBankFee || isTransfer ? "bg-slate-100" : isCredit ? "bg-emerald-100" : "bg-orange-100"
+          "h-8 w-8 rounded-lg flex items-center justify-center shrink-0",
+          isBankFee || isTransfer ? "bg-slate-100" : isCredit ? "bg-emerald-50" : "bg-orange-50"
         )}>
           {isBankFee ? (
-            <DollarSign className="h-4 w-4 text-slate-400" />
+            <CreditCard className="h-4 w-4 text-slate-400" />
           ) : isTransfer ? (
             <RefreshCw className="h-4 w-4 text-slate-400" />
           ) : isCredit ? (
@@ -494,163 +549,142 @@ function TransactionRow({
           )}
         </div>
 
+        {/* Main content */}
         <div className="flex-1 min-w-0">
+          {/* Top row: description + badges */}
           <div className="flex items-center gap-2">
+            {/* Show entity name if available, else truncated description */}
             <p className={cn(
               "text-sm font-medium truncate",
-              (isBankFee || isTransfer) ? "text-slate-500" : "text-slate-900"
+              (isBankFee || isTransfer) ? "text-slate-400" : "text-slate-900"
             )}>
-              {transaction.description}
+              {isBankFee ? (transaction.description?.split(" ").slice(0, 4).join(" ") || "Bank Fee")
+                : displayCounterparty || truncateDescription(transaction.description || "", 60)}
             </p>
-            {isMatched && !isAutoConfirmed && (
-              <Badge className="bg-emerald-100 text-emerald-700 text-[10px] shrink-0">
-                <CheckCircle2 className="h-3 w-3 mr-0.5" /> Matched
-              </Badge>
-            )}
-            {isAutoConfirmed && (
-              <Badge className="bg-emerald-100 text-emerald-700 text-[10px] shrink-0">
-                <Zap className="h-3 w-3 mr-0.5" /> Auto-matched
-              </Badge>
-            )}
             {isBankFee && (
-              <Badge variant="outline" className="text-slate-500 text-[10px] shrink-0">
-                <DollarSign className="h-3 w-3 mr-0.5" /> Bank Fee
-              </Badge>
+              <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">Bank Fee</span>
             )}
             {isTransfer && (
-              <Badge variant="outline" className="text-slate-500 text-[10px] shrink-0">
-                <RefreshCw className="h-3 w-3 mr-0.5" /> Transfer
-              </Badge>
-            )}
-            {match?.thinkingLevel === "high" && (
-              <Badge variant="outline" className="text-indigo-600 border-indigo-200 text-[10px] shrink-0">
-                <Brain className="h-3 w-3 mr-0.5" /> Deep Think
-              </Badge>
+              <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">Transfer</span>
             )}
           </div>
 
-          <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
-            <span className="flex items-center gap-1">
-              <Calendar className="h-3 w-3" />
-              {formatFullDate(transaction.date)}
-            </span>
-            {transaction.reference && (
-              <span className="truncate font-mono text-[10px] bg-slate-100 px-1.5 py-0.5 rounded">
-                {transaction.reference}
+          {/* Date + reference line */}
+          <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400">
+            <span>{formatFullDate(transaction.date)}</span>
+            {displayCounterparty && !isBankFee && (
+              <span className="truncate text-slate-400 max-w-[300px]">
+                {truncateDescription(transaction.description || "", 50)}
               </span>
             )}
           </div>
 
-          {/* AI Match Suggestion */}
+          {/* AI Match Suggestion — clean card */}
           {isPaymentMatch && match && (
-            <div className="mt-2.5 p-3 rounded-lg border bg-white shadow-sm">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-start gap-2.5 min-w-0">
+            <div className={cn(
+              "mt-2 p-2.5 rounded-lg border",
+              hasLinkedDocument ? "bg-emerald-50/50 border-emerald-200" : "bg-purple-50/50 border-purple-200"
+            )}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  {/* Confidence pill */}
                   <div className={cn(
-                    "h-8 w-8 rounded-lg flex items-center justify-center shrink-0",
-                    match.documentType === "invoice" ? "bg-emerald-100" : "bg-orange-100"
+                    "h-7 min-w-[42px] rounded-md flex items-center justify-center text-xs font-bold shrink-0",
+                    match.confidence >= 90 ? "bg-emerald-100 text-emerald-700" :
+                    match.confidence >= 75 ? "bg-purple-100 text-purple-700" :
+                    "bg-amber-100 text-amber-700"
                   )}>
-                    {match.documentType === "invoice" ? (
-                      <FileCheck className="h-4 w-4 text-emerald-600" />
-                    ) : (
-                      <FileSpreadsheet className="h-4 w-4 text-orange-600" />
-                    )}
+                    {match.confidence}%
                   </div>
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">{match.documentNumber || "Unknown"}</span>
-                      <Badge
-                        variant={match.confidence >= 80 ? "default" : "secondary"}
-                        className={cn("text-[10px]", match.confidence >= 80 && "bg-emerald-600")}
-                      >
-                        {match.confidence}%
-                      </Badge>
-                      {match.ruleBasedScore !== undefined && match.ruleBasedScore !== match.confidence && (
-                        <span className="text-[10px] text-slate-400">(rule: {match.ruleBasedScore}%)</span>
+                    <div className="flex items-center gap-1.5">
+                      {displayDocNumber && (
+                        <span className="text-xs font-semibold text-slate-800 font-mono">{displayDocNumber}</span>
+                      )}
+                      {displayCounterparty && (
+                        <span className="text-xs text-slate-500">{displayCounterparty}</span>
+                      )}
+                      {!hasLinkedDocument && displayDocNumber && (
+                        <span className="text-[9px] text-amber-600 bg-amber-50 border border-amber-200 px-1 py-0.5 rounded shrink-0">
+                          Ref only
+                        </span>
                       )}
                     </div>
-                    <div className="text-xs text-slate-500 mt-0.5">{match.counterpartyName}</div>
-                    {match.fxDetails && (
-                      <div className="text-[10px] text-purple-600 mt-1 flex items-center gap-1">
-                        <RefreshCw className="h-3 w-3" />
-                        {match.fxDetails.fromCurrency} → {match.fxDetails.toCurrency} @ {match.fxDetails.rate.toFixed(4)}
-                        {` = ${formatCurrency(match.fxDetails.convertedAmount, match.fxDetails.toCurrency)}`}
-                      </div>
-                    )}
-                    <p className="text-xs text-slate-600 mt-1.5">{match.reasoning[0]}</p>
-                    {match.reasoning.length > 1 && (
-                      <>
-                        <button
-                          onClick={() => setShowReasoning(!showReasoning)}
-                          className="text-[11px] text-purple-600 hover:text-purple-700 mt-1 flex items-center gap-0.5"
-                        >
-                          {showReasoning ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                          {showReasoning ? "Hide" : "Show"} reasoning ({match.reasoning.length} steps)
-                        </button>
-                        {showReasoning && (
-                          <div className="mt-1.5 p-2 rounded bg-slate-50 space-y-0.5">
-                            {match.reasoning.map((step, i) => (
-                              <p key={i} className="text-[11px] text-slate-600 font-mono">
-                                <span className="text-slate-400">{i + 1}.</span> {step}
-                              </p>
-                            ))}
-                          </div>
-                        )}
-                      </>
-                    )}
+                    <p className="text-[11px] text-slate-500 mt-0.5 truncate">{match.reasoning[0]}</p>
                   </div>
                 </div>
-                <div className="flex gap-1.5 shrink-0">
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {match.reasoning.length > 1 && (
+                    <button
+                      onClick={() => setShowReasoning(!showReasoning)}
+                      className="h-7 w-7 rounded-md border border-slate-200 flex items-center justify-center hover:bg-white transition-colors"
+                      title="Show reasoning"
+                    >
+                      <Eye className="h-3.5 w-3.5 text-slate-400" />
+                    </button>
+                  )}
                   <Button
                     size="sm"
-                    className="h-8 bg-emerald-600 hover:bg-emerald-700"
+                    className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700"
                     onClick={() => onConfirm(transaction)}
                     disabled={isProcessing}
                   >
-                    <Check className="h-4 w-4 mr-1" /> Confirm
+                    <Check className="h-3.5 w-3.5 mr-1" /> Confirm
                   </Button>
                   <Button
-                    size="sm" variant="outline" className="h-8"
+                    size="sm" variant="outline" className="h-7 w-7 p-0"
                     onClick={() => onReject(transaction.id)}
                     disabled={isProcessing}
                   >
-                    <X className="h-4 w-4" />
+                    <X className="h-3.5 w-3.5" />
                   </Button>
                 </div>
               </div>
-            </div>
-          )}
-
-          {(isBankFee || isTransfer) && match && (
-            <p className="text-xs text-slate-500 mt-1.5 italic">{match.reasoning[0]}</p>
-          )}
-
-          {isAutoConfirmed && match && (
-            <div className="mt-1.5 flex items-center gap-2 text-xs text-emerald-600">
-              <Zap className="h-3 w-3" />
-              <span>Auto-matched to {match.documentNumber} ({match.confidence}%)</span>
-              {match.reasoning.length > 0 && (
-                <span className="text-slate-400">— {match.reasoning[0]}</span>
+              {/* Expandable reasoning */}
+              {showReasoning && match.reasoning.length > 1 && (
+                <div className="mt-2 pt-2 border-t border-slate-200/60 space-y-0.5">
+                  {match.reasoning.map((step, i) => (
+                    <p key={i} className="text-[11px] text-slate-500">
+                      <span className="text-slate-400 font-mono mr-1">{i + 1}.</span> {step}
+                    </p>
+                  ))}
+                </div>
+              )}
+              {match.fxDetails && (
+                <div className="mt-1.5 text-[10px] text-purple-600 flex items-center gap-1">
+                  <RefreshCw className="h-3 w-3" />
+                  {match.fxDetails.fromCurrency} → {match.fxDetails.toCurrency} @ {match.fxDetails.rate.toFixed(4)}
+                </div>
               )}
             </div>
           )}
 
-          {!match && !isMatched && (
-            <div className="mt-2 flex items-center gap-2">
-              <Button
-                size="sm" variant="ghost" className="h-7 text-xs text-slate-500"
-                onClick={() => onCategorize(transaction.id)}
-              >
-                <Tag className="h-3 w-3 mr-1" /> Categorize
-              </Button>
+          {(isBankFee || isTransfer) && match && (
+            <p className="text-[11px] text-slate-400 mt-0.5 italic">{match.reasoning[0]}</p>
+          )}
+
+          {isAutoConfirmed && match && (
+            <div className="mt-1 flex items-center gap-1.5 text-[11px] text-emerald-600">
+              <Zap className="h-3 w-3" />
+              Auto-matched to {match.documentNumber} ({match.confidence}%)
             </div>
+          )}
+
+          {!match && !isMatched && (
+            <Button
+              size="sm" variant="ghost" className="h-6 text-[11px] text-slate-400 mt-1 px-2"
+              onClick={() => onCategorize(transaction.id)}
+            >
+              <Tag className="h-3 w-3 mr-1" /> Categorize
+            </Button>
           )}
         </div>
 
+        {/* Amount */}
         <div className="text-right shrink-0">
           <p className={cn(
-            "text-base font-semibold",
-            isCredit ? "text-emerald-600" : "text-slate-900"
+            "text-sm font-semibold tabular-nums",
+            isCredit ? "text-emerald-600" : (isBankFee || isTransfer) ? "text-slate-400" : "text-slate-900"
           )}>
             {isCredit ? "+" : "-"}{formatCurrency(Math.abs(transaction.amount), transaction.currency || "USD")}
           </p>
@@ -782,15 +816,12 @@ function ConfirmMatchModal({
 export default function ReconciliationPage() {
   const { user } = useAuth();
 
+  const { openDrawer: openUploadDrawer } = useUploadState();
   const [loading, setLoading] = useState(true);
   const [transactions, setTransactions] = useState<TransactionWithMatch[]>([]);
   const [invoices, setInvoices] = useState<OutgoingInvoice[]>([]);
   const [bills, setBills] = useState<IncomingBill[]>([]);
   const [activeTab, setActiveTab] = useState<"unmatched" | "suggested" | "matched" | "all">("unmatched");
-
-  // Upload
-  const [uploadModalOpen, setUploadModalOpen] = useState(false);
-  const [uploadType, setUploadType] = useState<DocumentType>("statement");
 
   // Confirm modal
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
@@ -939,48 +970,86 @@ export default function ReconciliationPage() {
     });
 
     try {
-      const reconcile = httpsCallable(functions, "reconcileAll", { timeout: 300000 });
-      const result = await reconcile({
-        transactionIds: unmatchedTxs.map(tx => tx.id),
-        progressId,
-        maxTransactions: 200,
-        autoConfirmThreshold: 93,
-      });
+      const reconcile = httpsCallable(functions, "reconcileAll", { timeout: 540000 });
+      
+      // Auto-chaining loop: process batches until done
+      let cursor: string | undefined;
+      let batchNumber = 0;
+      let accumulatedStats: any = undefined;
+      let totalMatches: TransactionMatch[] = [];
+      let finalData: ReconcileResult | null = null;
 
-      const data = result.data as ReconcileResult;
+      while (true) {
+        const result = await reconcile({
+          // Only send IDs on the first batch; subsequent batches use cursor
+          ...(batchNumber === 0 ? { transactionIds: unmatchedTxs.map(tx => tx.id) } : {}),
+          progressId,
+          autoConfirmThreshold: 93,
+          cursor,
+          batchNumber,
+          accumulatedStats,
+        });
+
+        const data = result.data as ReconcileResult & {
+          hasMore?: boolean;
+          cursor?: string;
+          batchNumber?: number;
+          batchProcessed?: number;
+          totalProcessedSoFar?: number;
+        };
+
+        // Accumulate matches across batches
+        if (data.matches?.length > 0) {
+          totalMatches = [...totalMatches, ...data.matches];
+          
+          // Apply this batch's matches to the UI immediately
+          setTransactions(prev => prev.map(tx => {
+            const match = data.matches.find(m => m.transactionId === tx.id);
+            if (!match) return tx;
+            return {
+              ...tx,
+              match,
+              ...(match.autoConfirmed ? { reconciliationStatus: "matched" as any } : {}),
+            };
+          }));
+        }
+
+        finalData = { ...data, matches: totalMatches };
+        accumulatedStats = data.stats;
+
+        // Check if there are more batches to process
+        if (data.hasMore && data.cursor) {
+          cursor = data.cursor;
+          batchNumber = (data.batchNumber ?? batchNumber) + 1;
+          // Brief pause between batches
+          await new Promise(r => setTimeout(r, 500));
+        } else {
+          break; // All done
+        }
+      }
 
       // Stop timer
       if (elapsedInterval.current) {
         clearInterval(elapsedInterval.current);
         elapsedInterval.current = null;
       }
-      setElapsedMs(data.processingTimeMs);
-
-      setPipelineResult(data);
-
-      // Apply match results to transactions
-      if (data.matches.length > 0) {
-        setTransactions(prev => prev.map(tx => {
-          const match = data.matches.find(m => m.transactionId === tx.id);
-          if (!match) return tx;
-          return {
-            ...tx,
-            match,
-            ...(match.autoConfirmed ? { reconciliationStatus: "matched" as any } : {}),
-          };
-        }));
+      if (finalData) {
+        setElapsedMs(finalData.processingTimeMs);
+        setPipelineResult(finalData);
       }
 
       // Switch to suggested tab if there are suggestions
-      const suggestions = data.matches.filter(
+      const suggestions = totalMatches.filter(
         m => m.classification === "payment_match" && !m.autoConfirmed
       );
       if (suggestions.length > 0) {
         setActiveTab("suggested");
       }
 
+      const stats = finalData?.stats;
+      const batchInfo = batchNumber > 0 ? ` (${batchNumber + 1} batches)` : "";
       toast.success(
-        `Done! ${data.stats.autoConfirmed} auto-confirmed, ${data.stats.aiMatches + data.stats.deepMatches} suggestions, ${data.stats.bankFees} bank fees identified.`
+        `Done${batchInfo}! ${stats?.autoConfirmed || 0} auto-confirmed, ${(stats?.aiMatches || 0) + (stats?.deepMatches || 0)} suggestions, ${stats?.bankFees || 0} bank fees identified.`
       );
     } catch (error: any) {
       console.error("Reconciliation error:", error);
@@ -1120,6 +1189,38 @@ export default function ReconciliationPage() {
       <Header title="Reconciliation" />
       <div className="p-4 space-y-4">
         <StatsCards transactions={transactions} bills={bills} invoices={invoices} />
+
+        {/* Warning: No documents to match against */}
+        {transactions.length > 0 && bills.length === 0 && invoices.length === 0 && !isReconciling && (
+          <div className="flex items-start gap-3 p-4 rounded-xl border border-amber-200 bg-amber-50">
+            <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h4 className="text-sm font-semibold text-amber-900">No invoices or bills uploaded</h4>
+              <p className="text-xs text-amber-700 mt-0.5">
+                AI found invoice references in your bank statements but can't match them to actual documents. 
+                Upload your invoices and bills to enable full automatic matching.
+              </p>
+              <div className="flex gap-2 mt-3">
+                <Button 
+                  size="sm" variant="outline" 
+                  className="h-7 text-xs border-amber-300 hover:bg-amber-100"
+                  onClick={() => openUploadDrawer("invoice")}
+                >
+                  <FileCheck className="h-3.5 w-3.5 mr-1.5 text-emerald-600" />
+                  Upload Invoices
+                </Button>
+                <Button 
+                  size="sm" variant="outline" 
+                  className="h-7 text-xs border-amber-300 hover:bg-amber-100"
+                  onClick={() => openUploadDrawer("bill")}
+                >
+                  <FileSpreadsheet className="h-3.5 w-3.5 mr-1.5 text-orange-600" />
+                  Upload Bills
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* AI Reasoning Stream — THE SHOWPIECE */}
         <ReasoningStream
@@ -1293,15 +1394,15 @@ export default function ReconciliationPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => { setUploadType("statement"); setUploadModalOpen(true); }}>
+                <DropdownMenuItem onClick={() => openUploadDrawer("statement")}>
                   <Building2 className="h-4 w-4 mr-2 text-cyan-600" />
                   Bank Statement
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => { setUploadType("invoice"); setUploadModalOpen(true); }}>
+                <DropdownMenuItem onClick={() => openUploadDrawer("invoice")}>
                   <FileCheck className="h-4 w-4 mr-2 text-emerald-600" />
                   Invoice
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => { setUploadType("bill"); setUploadModalOpen(true); }}>
+                <DropdownMenuItem onClick={() => openUploadDrawer("bill")}>
                   <FileSpreadsheet className="h-4 w-4 mr-2 text-orange-600" />
                   Bill
                 </DropdownMenuItem>
@@ -1401,12 +1502,6 @@ export default function ReconciliationPage() {
         isProcessing={isConfirming}
       />
 
-      {/* Upload Drawer */}
-      <UploadDrawer
-        open={uploadModalOpen}
-        onOpenChange={setUploadModalOpen}
-        defaultType={uploadType}
-      />
     </>
   );
 }

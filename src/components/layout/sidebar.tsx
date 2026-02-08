@@ -41,6 +41,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useBrand } from "@/hooks/use-brand";
 import { useSubscription } from "@/hooks/use-subscription";
 import { useDemoMode } from "@/hooks/use-demo-mode";
+import { useUploadState } from "@/hooks/use-upload-state";
 import { BrandLogo } from "@/components/brand";
 import { useState, useEffect, useCallback } from "react";
 
@@ -101,6 +102,7 @@ export function Sidebar() {
   const brand = useBrand();
   const subscription = useSubscription();
   const { isDemoMode } = useDemoMode();
+  const { openDrawer: openUploadDrawer } = useUploadState();
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('sidebar-collapsed') === 'true';
@@ -292,6 +294,21 @@ export function Sidebar() {
         </div>
       )}
 
+      {/* Upload Documents */}
+      <div className="px-3 pb-3">
+        <button
+          onClick={() => openUploadDrawer("statement")}
+          className={cn(
+            "group w-full flex items-center gap-3 rounded-xl px-3.5 py-3 text-sm font-semibold transition-all duration-200",
+            "bg-white/10 text-slate-100 border border-white/15 hover:bg-white/[0.17] hover:border-white/25 active:scale-[0.98]",
+            collapsed && "justify-center px-0"
+          )}
+        >
+          <Upload className="h-4 w-4 flex-shrink-0 text-slate-300 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:text-white" />
+          {!collapsed && <span>Upload Documents</span>}
+        </button>
+      </div>
+
       {/* Account Menu - Clean Dropdown */}
       <div className="p-3 border-t border-slate-800">
         <DropdownMenu>
@@ -314,7 +331,11 @@ export function Sidebar() {
                 <>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-slate-100 truncate">{user?.name}</p>
-                    <p className="text-xs text-slate-400 truncate">{user?.email}</p>
+                    {(user as any)?.companyName ? (
+                      <p className="text-[10px] text-slate-400 truncate">{(user as any).companyName}</p>
+                    ) : (
+                      <p className="text-xs text-slate-400 truncate">{user?.email}</p>
+                    )}
                   </div>
                   <ChevronUp className="h-4 w-4 text-slate-400" />
                 </>
@@ -344,6 +365,12 @@ export function Sidebar() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-slate-900 truncate">{user?.name}</p>
                 <p className="text-xs text-slate-500 truncate">{user?.email}</p>
+                {(user as any)?.companyName && (
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <Building2 className="h-3 w-3 text-slate-400 shrink-0" />
+                    <p className="text-[10px] text-slate-400 truncate">{(user as any).companyName}</p>
+                  </div>
+                )}
               </div>
             </div>
 

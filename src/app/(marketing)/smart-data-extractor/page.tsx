@@ -14,13 +14,10 @@ import {
   Download,
   AlertCircle,
   CheckCircle2,
-  Loader2,
-  Table,
   FileText,
   ArrowRight,
   Brain,
   Zap,
-  Eye,
   FileType,
   Shield,
   Sparkles,
@@ -46,11 +43,15 @@ type DemoStep =
   | "uploading"
   | "reading"
   | "analyzing"
-  | "discovering_headers"
-  | "extracting"
   | "complete"
   | "error"
   | "rate_limited";
+
+interface DocumentMetadataItem {
+  label: string;
+  value: string;
+  category: "entity" | "reference" | "date" | "financial" | "payment" | "tax" | "contact" | "other";
+}
 
 interface ExtractResult {
   success: boolean;
@@ -64,34 +65,13 @@ interface ExtractResult {
   error?: string;
   signupUrl?: string;
   pageCount?: number;
-  bankName?: string;
-  bankCountry?: string;
-  accountNumber?: string;
-  accountHolderName?: string;
-  accountType?: string;
+  // Dynamic metadata from AI
+  metadata?: DocumentMetadataItem[];
+  // Backward-compat convenience fields
   currency?: string;
-  periodStart?: string;
-  periodEnd?: string;
-  openingBalance?: number;
-  closingBalance?: number;
-  totalCredits?: number;
-  totalDebits?: number;
-  transactionCount?: number;
   supplierName?: string;
-  supplierAddress?: string;
-  customerName?: string;
-  invoiceNumber?: string;
-  invoiceDate?: string;
-  dueDate?: string;
-  subtotal?: number;
-  taxAmount?: number;
+  bankName?: string;
   totalAmount?: number;
-  paymentTerms?: string;
-  merchantName?: string;
-  merchantAddress?: string;
-  receiptDate?: string;
-  receiptNumber?: string;
-  paymentMethod?: string;
 }
 
 // ============================================
@@ -218,8 +198,7 @@ function StepIndicator({ currentStep }: { currentStep: DemoStep }) {
     const currentStepNum = 
       currentStep === "idle" ? -1 :
       currentStep === "uploading" || currentStep === "reading" ? 0 :
-      currentStep === "analyzing" || currentStep === "discovering_headers" ? 1 :
-      currentStep === "extracting" ? 2 :
+      currentStep === "analyzing" ? 1 :
       currentStep === "complete" ? 3 : -1;
     
     const thisStepNum = stepMap[stepId];
@@ -269,6 +248,128 @@ function StepIndicator({ currentStep }: { currentStep: DemoStep }) {
 }
 
 // ============================================
+// THINKING TERMINAL (same style as dashboard)
+// ============================================
+
+interface ThinkingLine {
+  text: string;
+  type: "step" | "analyze" | "search" | "match" | "confirm" | "classify" | "info" | "learn";
+}
+
+function DemoTerminal({
+  lines,
+  isRunning,
+  elapsedMs,
+}: {
+  lines: ThinkingLine[];
+  isRunning: boolean;
+  elapsedMs: number;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [lines.length]);
+
+  const getIcon = (type: ThinkingLine["type"]) => {
+    switch (type) {
+      case "step": return "▸";
+      case "analyze": return "→";
+      case "search": return "  ↳";
+      case "match": return "  ↳";
+      case "confirm": return "  ✓";
+      case "classify": return "  ◆";
+      case "info": return "─";
+      case "learn": return "  🧠";
+      default: return " ";
+    }
+  };
+
+  const getStyle = (type: ThinkingLine["type"]) => {
+    switch (type) {
+      case "step": return "text-slate-900 font-bold text-[13px] mt-3 first:mt-0";
+      case "analyze": return "text-cyan-700 font-medium mt-1.5";
+      case "search": return "text-slate-500";
+      case "match": return "text-purple-700";
+      case "confirm": return "text-emerald-600 font-semibold";
+      case "classify": return "text-amber-600";
+      case "info": return "text-slate-400 text-[10px]";
+      case "learn": return "text-emerald-600";
+      default: return "text-slate-500";
+    }
+  };
+
+  return (
+    <div className="h-full rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden flex flex-col">
+      {/* Terminal header */}
+      <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-200 shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <div className="h-2.5 w-2.5 rounded-full bg-red-400" />
+            <div className="h-2.5 w-2.5 rounded-full bg-amber-400" />
+            <div className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-mono text-slate-500">Gemini 3 Flash</span>
+            {isRunning && (
+              <span className="flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-[9px] text-emerald-600 font-mono">LIVE</span>
+              </span>
+            )}
+          </div>
+        </div>
+        <span className="text-[10px] font-mono text-slate-400">{(elapsedMs / 1000).toFixed(1)}s</span>
+      </div>
+
+      {/* Terminal body */}
+      <div
+        ref={scrollRef}
+        className="flex-1 p-3 font-mono text-[10px] leading-[1.7] overflow-y-auto"
+        style={{ scrollbarWidth: "thin", scrollbarColor: "#cbd5e1 transparent" }}
+      >
+        <div className="text-slate-400 mb-2">
+          <span className="text-purple-600">$</span> gemini-3-flash --mode=vision --output=structured-json
+        </div>
+
+        {lines.map((line, idx) => {
+          const icon = getIcon(line.type);
+          const style = getStyle(line.type);
+
+          if (line.type === "step") {
+            return (
+              <div key={idx} className={`font-mono ${style}`}>
+                <div className="border-b border-slate-100 pb-0.5 mb-0.5">
+                  {icon} {line.text}
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div
+              key={idx}
+              className={`font-mono animate-in fade-in slide-in-from-bottom-1 duration-200 ${style}`}
+            >
+              {icon} {line.text}
+            </div>
+          );
+        })}
+
+        {isRunning && (
+          <div className="mt-1 flex items-center gap-1">
+            <span className="text-purple-600">$</span>
+            <span className="w-1.5 h-3.5 bg-purple-400 animate-pulse" />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================
 // DEMO TOOL SECTION
 // ============================================
 
@@ -278,76 +379,108 @@ function DemoToolSection() {
   const [file, setFile] = useState<File | null>(null);
   const [result, setResult] = useState<ExtractResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [visibleHeaders, setVisibleHeaders] = useState(0);
-  const [progress, setProgress] = useState(0);
   const [hasUsedDemo, setHasUsedDemo] = useState(false);
   const [isLocalhost, setIsLocalhost] = useState(false);
-  const headerAnimationRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Terminal state
+  const [terminalLines, setTerminalLines] = useState<ThinkingLine[]>([]);
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const elapsedRef = useRef<NodeJS.Timeout | null>(null);
+  const startTimeRef = useRef(0);
+  const thinkingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    // Bypass demo limit on localhost
     const localhost = typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
     setIsLocalhost(localhost);
-    
     if (!localhost) {
       const used = localStorage.getItem("smart-extractor-demo-used");
       if (used) setHasUsedDemo(true);
     }
-    return () => { if (headerAnimationRef.current) clearTimeout(headerAnimationRef.current); };
+    return () => {
+      if (elapsedRef.current) clearInterval(elapsedRef.current);
+      if (thinkingIntervalRef.current) clearTimeout(thinkingIntervalRef.current);
+    };
   }, []);
+
+  const startTimer = () => {
+    startTimeRef.current = Date.now();
+    setElapsedMs(0);
+    elapsedRef.current = setInterval(() => {
+      setElapsedMs(Date.now() - startTimeRef.current);
+    }, 100);
+  };
+
+  const stopTimer = () => {
+    if (elapsedRef.current) { clearInterval(elapsedRef.current); elapsedRef.current = null; }
+  };
+
+  const addLine = (text: string, type: ThinkingLine["type"] = "info") => {
+    setTerminalLines(prev => [...prev, { text, type }]);
+  };
+
+  const addLineDelayed = (text: string, type: ThinkingLine["type"], delayMs: number): Promise<void> => {
+    return new Promise(resolve => {
+      thinkingIntervalRef.current = setTimeout(() => {
+        setTerminalLines(prev => [...prev, { text, type }]);
+        resolve();
+      }, delayMs);
+    });
+  };
+
+  // Simulated thinking lines that appear while waiting for API
+  const simulateThinking = (fileName: string, fileSize: number, mimeType: string) => {
+    const thinkingSteps = [
+      { text: "DOCUMENT UPLOAD", type: "step" as const, delay: 0 },
+      { text: `Received: ${fileName}`, type: "analyze" as const, delay: 150 },
+      { text: `File size: ${(fileSize / 1024).toFixed(0)} KB • Type: ${mimeType || "application/pdf"}`, type: "search" as const, delay: 100 },
+      { text: "Encoding to base64 for secure transfer...", type: "search" as const, delay: 200 },
+      { text: "Upload complete — sending to AI", type: "confirm" as const, delay: 300 },
+      { text: "AI DOCUMENT ANALYSIS", type: "step" as const, delay: 400 },
+      { text: "Initializing Gemini 3 Flash with vision capabilities...", type: "analyze" as const, delay: 200 },
+      { text: "Model: gemini-3-flash • Mode: multimodal vision", type: "search" as const, delay: 120 },
+      { text: "Output: structured JSON with dynamic metadata", type: "search" as const, delay: 100 },
+      { text: "Scanning document for tables, headers, and structure...", type: "analyze" as const, delay: 600 },
+      { text: "Detecting row/column boundaries and data types...", type: "search" as const, delay: 800 },
+      { text: "Extracting ALL key metadata from document...", type: "search" as const, delay: 600 },
+      { text: "Identifying entities, dates, financial data, references...", type: "search" as const, delay: 700 },
+      { text: "Detecting currency symbols and codes...", type: "search" as const, delay: 500 },
+      { text: "Classifying document type...", type: "search" as const, delay: 600 },
+      { text: "Extracting tabular data rows...", type: "analyze" as const, delay: 800 },
+      { text: "Validating extracted values...", type: "search" as const, delay: 600 },
+      { text: "Cross-referencing metadata with table structure...", type: "search" as const, delay: 700 },
+    ];
+
+    let totalDelay = 0;
+    for (const step of thinkingSteps) {
+      totalDelay += step.delay;
+      const d = totalDelay;
+      setTimeout(() => {
+        setTerminalLines(prev => [...prev, { text: step.text, type: step.type }]);
+      }, d);
+    }
+  };
 
   const reset = useCallback(() => {
     setStep("idle");
     setFile(null);
     setResult(null);
     setError(null);
-    setVisibleHeaders(0);
-    setProgress(0);
-    if (headerAnimationRef.current) clearTimeout(headerAnimationRef.current);
-  }, []);
-
-  const animateHeaders = useCallback((headers: Pdf2SheetHeader[]) => {
-    setVisibleHeaders(0);
-    let index = 0;
-    const animate = () => {
-      if (index < headers.length) {
-        setVisibleHeaders(index + 1);
-        index++;
-        headerAnimationRef.current = setTimeout(animate, 200);
-      } else {
-        setTimeout(() => { setStep("extracting"); animateExtraction(); }, 600);
-      }
-    };
-    headerAnimationRef.current = setTimeout(animate, 400);
-  }, []);
-
-  const animateExtraction = useCallback(() => {
-    setProgress(0);
-    let p = 0;
-    const interval = setInterval(() => {
-      p += Math.random() * 15 + 5;
-      if (p >= 100) {
-        p = 100;
-        clearInterval(interval);
-        setStep("complete");
-        setFile(null);
-      }
-      setProgress(Math.min(p, 100));
-    }, 200);
+    setTerminalLines([]);
+    setElapsedMs(0);
+    stopTimer();
+    if (thinkingIntervalRef.current) clearTimeout(thinkingIntervalRef.current);
   }, []);
 
   const processFile = useCallback(async (uploadedFile: File) => {
     setFile(uploadedFile);
     setError(null);
     setResult(null);
-    setVisibleHeaders(0);
-    setProgress(0);
-
-    setStep("uploading");
-    await new Promise(r => setTimeout(r, 500));
-    setStep("reading");
-    await new Promise(r => setTimeout(r, 800));
+    setTerminalLines([]);
+    startTimer();
     setStep("analyzing");
+
+    // Start terminal simulation
+    simulateThinking(uploadedFile.name, uploadedFile.size, uploadedFile.type);
 
     try {
       const base64 = await new Promise<string>((resolve, reject) => {
@@ -358,7 +491,7 @@ function DemoToolSection() {
       });
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
+      const timeoutId = setTimeout(() => controller.abort(), 120000);
 
       const response = await fetch("/api/demo/extract", {
         method: "POST",
@@ -376,6 +509,7 @@ function DemoToolSection() {
       const data: ExtractResult = await response.json();
 
       if (response.status === 429) {
+        stopTimer();
         setStep("rate_limited");
         setResult(data);
         return;
@@ -389,25 +523,81 @@ function DemoToolSection() {
         throw new Error("No tabular data found in document");
       }
 
-      setResult(data);
-      // Only track usage on non-localhost
-      const localhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-      if (!localhost) {
-        localStorage.setItem("smart-extractor-demo-used", "true");
-        setHasUsedDemo(true);
-      }
-      setStep("discovering_headers");
-      animateHeaders(data.headers);
+      // Reveal results in terminal
+      const revealResults = async () => {
+        const docTypeLabel = (data.documentType || "Document").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+        await addLineDelayed("STRUCTURE DETECTION", "step", 200);
+        await addLineDelayed(`Classified as: ${docTypeLabel}`, "confirm", 150);
+        await addLineDelayed(`Confidence: ${Math.round((data.confidence || 0) * 100)}%`, "confirm", 100);
+
+        // Reveal metadata
+        const metadata = data.metadata || [];
+        if (metadata.length > 0) {
+          await addLineDelayed("DOCUMENT METADATA", "step", 200);
+          await addLineDelayed(`Found ${metadata.length} key fields on document:`, "analyze", 120);
+          const categoryIcon: Record<string, string> = {
+            entity: "🏢", reference: "🔗", date: "📅", financial: "💰",
+            payment: "🏦", tax: "📋", contact: "📍", other: "📎",
+          };
+          for (const item of metadata) {
+            const icon = categoryIcon[item.category] || "📎";
+            await addLineDelayed(`${icon} ${item.label}: ${item.value}`, "match", 50 + Math.random() * 50);
+          }
+        }
+
+        // Reveal headers
+        await addLineDelayed("COLUMN DISCOVERY", "step", 200);
+        await addLineDelayed(`Detected ${data.headers!.length} columns:`, "analyze", 120);
+        for (let i = 0; i < data.headers!.length; i++) {
+          const h = data.headers![i];
+          const typeLabel = h.type === "currency" ? "💰 currency" : h.type === "date" ? "📅 date" : h.type === "number" ? "🔢 number" : "📝 text";
+          await addLineDelayed(`Column ${i + 1}: ${h.name} [${typeLabel}]`, "match", 60);
+        }
+
+        // Rows extracted
+        await addLineDelayed("DATA EXTRACTION", "step", 200);
+        await addLineDelayed(`Extracted ${data.rows?.length || 0} rows from document`, "confirm", 100);
+        if (data.rows && data.rows.length > 0 && data.headers) {
+          const firstRow = data.rows[0];
+          const previewCols = data.headers.slice(0, 3);
+          const preview = previewCols.map(h => `${h.name}: ${firstRow[h.name] ?? "—"}`).join(" • ");
+          await addLineDelayed(`Row 1: ${preview}`, "search", 80);
+        }
+        if (data.warnings && data.warnings.length > 0) {
+          for (const w of data.warnings) {
+            await addLineDelayed(`⚠ ${w}`, "classify", 60);
+          }
+        }
+        await addLineDelayed("ANALYSIS COMPLETE", "step", 200);
+        await addLineDelayed("Ready — review results below", "confirm", 100);
+
+        stopTimer();
+        setResult(data);
+        
+        // Track usage
+        const localhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+        if (!localhost) {
+          localStorage.setItem("smart-extractor-demo-used", "true");
+          setHasUsedDemo(true);
+        }
+
+        // Short pause then show results
+        await new Promise(r => setTimeout(r, 600));
+        setStep("complete");
+      };
+
+      revealResults();
     } catch (err) {
+      stopTimer();
       console.error("Demo extraction error:", err);
-      if (err instanceof Error && err.name === "AbortError") {
-        setError("Request timed out. Please try a smaller file.");
-      } else {
-        setError(err instanceof Error ? err.message : "Something went wrong");
-      }
+      const msg = err instanceof Error && err.name === "AbortError"
+        ? "Request timed out. Please try a smaller file."
+        : (err instanceof Error ? err.message : "Something went wrong");
+      addLine(`✗ Error: ${msg}`, "classify");
+      setError(msg);
       setStep("error");
     }
-  }, [animateHeaders]);
+  }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop: (files) => { if (files[0]) processFile(files[0]); },
@@ -425,19 +615,16 @@ function DemoToolSection() {
     return { color: "#6B7280", label: docType || "Document" };
   };
 
-  const formatCurrency = (value?: number, curr?: string) => {
-    if (value === undefined || value === null) return null;
-    
-    // Map currency codes to symbols
+  const formatCurrency = (value: number, curr?: string): string => {
     const currencySymbols: Record<string, string> = {
       USD: "$", EUR: "€", GBP: "£", CAD: "C$", AUD: "A$",
       JPY: "¥", CNY: "¥", CHF: "CHF ", INR: "₹", KRW: "₩",
       BRL: "R$", MXN: "MX$", SGD: "S$", HKD: "HK$", NZD: "NZ$",
       SEK: "kr ", NOK: "kr ", DKK: "kr ", ZAR: "R", ANG: "ƒ",
       AED: "د.إ", THB: "฿", PLN: "zł", CZK: "Kč", ILS: "₪",
+      TRY: "₺", RUB: "₽", HUF: "Ft", RON: "lei",
     };
-    
-    const symbol = curr ? (currencySymbols[curr.toUpperCase()] || `${curr} `) : "$";
+    const symbol = curr ? (currencySymbols[curr.toUpperCase()] || `${curr} `) : "";
     return `${symbol}${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
@@ -574,86 +761,39 @@ function DemoToolSection() {
               </div>
             )}
 
-            {/* PROCESSING */}
+            {/* PROCESSING — AI THINKING TERMINAL */}
             {(step === "uploading" || step === "reading" || step === "analyzing") && (
-              <div className="h-full flex flex-col items-center justify-center py-8">
-                <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6" style={{ backgroundColor: `${brand.colors.primary}10` }}>
-                  {step === "uploading" && <Upload className="w-7 h-7 animate-pulse" style={{ color: brand.colors.primary }} />}
-                  {step === "reading" && <Eye className="w-7 h-7 animate-pulse" style={{ color: brand.colors.primary }} />}
-                  {step === "analyzing" && <Brain className="w-7 h-7 animate-pulse" style={{ color: brand.colors.primary }} />}
-                </div>
-                <p className="font-semibold text-slate-900 mb-1">
-                  {step === "uploading" && "Uploading..."}
-                  {step === "reading" && "Reading document..."}
-                  {step === "analyzing" && "Analyzing structure..."}
-                </p>
-                <p className="text-sm text-slate-500">
-                  {step === "uploading" && "Transferring securely"}
-                  {step === "reading" && "AI scanning content"}
-                  {step === "analyzing" && "Detecting tables & columns"}
-                </p>
-              </div>
-            )}
-
-            {/* DISCOVERING HEADERS */}
-            {step === "discovering_headers" && result?.headers && (() => {
-              const docStyle = getDocTypeStyle(result.documentType);
-              const title = result.bankName || result.supplierName || result.merchantName || docStyle.label;
-              return (
-                <div className="h-full flex flex-col">
-                  <div className="text-center mb-4">
-                    <div className="flex items-center justify-center gap-2 text-emerald-600 text-sm mb-2">
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span className="font-medium">Document identified</span>
-                    </div>
-                    <p className="font-bold text-lg text-slate-900">{title}</p>
-                  </div>
-                  <div className="bg-slate-50 rounded-xl p-4 flex-1">
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-sm font-medium text-slate-700">Columns found</span>
-                      <span className="text-xs text-slate-500">{visibleHeaders}/{result.headers.length}</span>
-                    </div>
-                    <div className="h-1 bg-slate-200 rounded-full mb-4 overflow-hidden">
-                      <div className="h-full rounded-full transition-all" style={{ width: `${(visibleHeaders / result.headers.length) * 100}%`, backgroundColor: docStyle.color }} />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      {result.headers.map((header, index) => (
-                        <div key={header.name} className={`p-2 rounded-lg bg-white border text-sm transition-all ${index < visibleHeaders ? "opacity-100 border-slate-200" : "opacity-0"}`}>
-                          <span className="font-medium text-slate-900 truncate block">{header.name}</span>
-                          <span className="text-[10px] text-slate-500 capitalize">{header.type}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* EXTRACTING */}
-            {step === "extracting" && (
-              <div className="h-full flex flex-col items-center justify-center py-8">
-                <Loader2 className="w-10 h-10 animate-spin mb-4" style={{ color: brand.colors.primary }} />
-                <p className="font-semibold text-slate-900 mb-1">Extracting data...</p>
-                <p className="text-sm text-slate-500 mb-4">{result?.headers?.length || 0} columns</p>
-                <div className="w-48">
-                  <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                    <div className="h-full rounded-full transition-all" style={{ width: `${progress}%`, backgroundColor: brand.colors.primary }} />
-                  </div>
-                  <p className="text-xs text-slate-400 text-center mt-2">{Math.round(progress)}%</p>
-                </div>
-              </div>
+              <DemoTerminal
+                lines={terminalLines}
+                isRunning={true}
+                elapsedMs={elapsedMs}
+              />
             )}
 
             {/* COMPLETE */}
             {step === "complete" && result?.rows && result?.headers && (() => {
               const docStyle = getDocTypeStyle(result.documentType);
-              const title = result.bankName || result.supplierName || result.merchantName || docStyle.label;
-              const isBankStatement = (result.documentType || "").toLowerCase().includes("bank");
-              const isInvoice = (result.documentType || "").toLowerCase().includes("invoice");
+              const entityMeta = result.metadata?.find(m => m.category === "entity");
+              const title = entityMeta?.value || result.bankName || result.supplierName || docStyle.label;
+              const currencyMeta = result.metadata?.find(m => m.label.toLowerCase().includes("currency"));
+              const detectedCurrency = currencyMeta?.value || result.currency;
+              
+              // Category colors for metadata pills
+              const categoryColors: Record<string, { bg: string; text: string; border: string }> = {
+                entity: { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200" },
+                reference: { bg: "bg-slate-50", text: "text-slate-700", border: "border-slate-200" },
+                date: { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200" },
+                financial: { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
+                payment: { bg: "bg-indigo-50", text: "text-indigo-700", border: "border-indigo-200" },
+                tax: { bg: "bg-orange-50", text: "text-orange-700", border: "border-orange-200" },
+                contact: { bg: "bg-purple-50", text: "text-purple-700", border: "border-purple-200" },
+                other: { bg: "bg-slate-50", text: "text-slate-600", border: "border-slate-200" },
+              };
               
               return (
                 <div className="h-full flex flex-col">
-                  <div className="flex items-center gap-3 mb-4 p-3 rounded-xl" style={{ backgroundColor: `${docStyle.color}08` }}>
+                  {/* Header */}
+                  <div className="flex items-center gap-3 mb-3 p-3 rounded-xl" style={{ backgroundColor: `${docStyle.color}08` }}>
                     <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${docStyle.color}15` }}>
                       <CheckCircle2 className="w-5 h-5 text-emerald-500" />
                     </div>
@@ -661,60 +801,68 @@ function DemoToolSection() {
                       <p className="font-semibold text-slate-900 truncate">{title}</p>
                       <p className="text-xs text-slate-500">
                         {result.rows.length} rows extracted
-                        {result.currency && <span className="ml-2 text-slate-400">• {result.currency}</span>}
+                        {detectedCurrency && <span className="ml-2 text-slate-400">• {detectedCurrency}</span>}
+                        {result.confidence && <span className="ml-2 text-slate-400">• {Math.round(result.confidence * 100)}%</span>}
                       </p>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2 mb-4">
-                    {isBankStatement && result.openingBalance !== undefined && (
-                      <div className="bg-slate-50 rounded-lg p-2 text-center">
-                        <p className="text-[10px] text-slate-500 uppercase">Opening</p>
-                        <p className="font-semibold text-sm text-slate-900">{formatCurrency(result.openingBalance, result.currency)}</p>
-                      </div>
-                    )}
-                    {isBankStatement && result.closingBalance !== undefined && (
-                      <div className="bg-slate-50 rounded-lg p-2 text-center">
-                        <p className="text-[10px] text-slate-500 uppercase">Closing</p>
-                        <p className="font-semibold text-sm text-slate-900">{formatCurrency(result.closingBalance, result.currency)}</p>
-                      </div>
-                    )}
-                    {isInvoice && result.totalAmount !== undefined && (
-                      <div className="bg-purple-50 rounded-lg p-2 text-center col-span-3">
-                        <p className="text-[10px] text-purple-600 uppercase">Total</p>
-                        <p className="font-bold text-purple-700">{formatCurrency(result.totalAmount, result.currency)}</p>
-                      </div>
-                    )}
-                    <div className="bg-slate-50 rounded-lg p-2 text-center">
-                      <p className="text-[10px] text-slate-500 uppercase">Rows</p>
-                      <p className="font-semibold text-sm text-slate-900">{result.rows.length}</p>
+                  {/* Dynamic metadata pills */}
+                  {result.metadata && result.metadata.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-3">
+                      {result.metadata.slice(0, 12).map((item, idx) => {
+                        const colors = categoryColors[item.category] || categoryColors.other;
+                        return (
+                          <span
+                            key={idx}
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[10px] ${colors.bg} ${colors.text} ${colors.border}`}
+                          >
+                            <span className="font-medium">{item.label}:</span>
+                            <span className="truncate max-w-[120px]">{item.value}</span>
+                          </span>
+                        );
+                      })}
+                      {result.metadata.length > 12 && (
+                        <span className="text-[10px] text-slate-400 self-center">+{result.metadata.length - 12} more</span>
+                      )}
                     </div>
-                    <div className="bg-slate-50 rounded-lg p-2 text-center">
-                      <p className="text-[10px] text-slate-500 uppercase">Columns</p>
-                      <p className="font-semibold text-sm text-slate-900">{result.headers.length}</p>
-                    </div>
-                    <div className="bg-slate-50 rounded-lg p-2 text-center">
-                      <p className="text-[10px] text-slate-500 uppercase">Confidence</p>
-                      <p className="font-semibold text-sm text-slate-900">{Math.round((result.confidence || 0) * 100)}%</p>
-                    </div>
-                  </div>
+                  )}
 
+                  {/* Data table */}
                   <div className="flex-1 border rounded-lg overflow-hidden mb-4">
                     <div className="overflow-auto" style={{ maxHeight: "180px" }}>
                       <table className="w-full text-xs">
                         <thead className="bg-slate-50 sticky top-0">
                           <tr>
                             {result.headers.slice(0, 5).map((h) => (
-                              <th key={h.name} className="px-3 py-2 text-left font-medium text-slate-600 truncate">{h.name}</th>
+                              <th key={h.name} className="px-3 py-2 text-left font-medium text-slate-600 truncate">
+                                {h.name}
+                                {h.type === "currency" && detectedCurrency && (
+                                  <span className="ml-1 text-[9px] text-slate-400 font-normal">({detectedCurrency})</span>
+                                )}
+                              </th>
                             ))}
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                           {result.rows.slice(0, 6).map((row, i) => (
                             <tr key={i} className="hover:bg-slate-50">
-                              {result.headers!.slice(0, 5).map((h) => (
-                                <td key={h.name} className="px-3 py-1.5 text-slate-700 truncate max-w-[120px]">{String(row[h.name] || "—").slice(0, 25)}</td>
-                              ))}
+                              {result.headers!.slice(0, 5).map((h) => {
+                                const val = row[h.name];
+                                let display = val === null || val === undefined ? "—" : String(val).slice(0, 25);
+                                // Format currency values
+                                if (h.type === "currency" && val !== null && val !== undefined && val !== "" && val !== "-") {
+                                  const num = typeof val === "number" ? val : parseFloat(String(val));
+                                  if (!isNaN(num)) {
+                                    display = formatCurrency(num, detectedCurrency);
+                                  }
+                                }
+                                return (
+                                  <td key={h.name} className={`px-3 py-1.5 truncate max-w-[120px] ${h.type === "currency" ? "text-slate-900 font-medium tabular-nums" : "text-slate-700"}`}>
+                                    {display}
+                                  </td>
+                                );
+                              })}
                             </tr>
                           ))}
                         </tbody>
