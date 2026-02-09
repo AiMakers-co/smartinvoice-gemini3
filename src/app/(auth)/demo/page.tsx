@@ -25,40 +25,42 @@ export default function DemoPage() {
   const [status, setStatus] = useState("Preparing demo...");
 
   useEffect(() => {
-    // If already logged in with demo mode, redirect
-    if (!loading && user) {
+    if (loading || started) return;
+
+    // If already logged in with a demo session, redirect
+    if (user && localStorage.getItem(SESSION_KEY)) {
       router.replace("/dashboard");
       return;
     }
 
-    if (!loading && !user && !started) {
-      setStarted(true);
+    setStarted(true);
 
-      (async () => {
-        try {
-          // Check for existing session (returning user)
-          let sessionId = localStorage.getItem(SESSION_KEY);
+    (async () => {
+      try {
+        // Sign in first so we have Firestore permissions
+        setStatus("Signing in...");
+        await signInAsGuest();
 
-          if (!sessionId) {
-            // New demo session — clone data
-            sessionId = generateSessionId();
-            localStorage.setItem(SESSION_KEY, sessionId);
+        // Check for existing session (returning user)
+        let sessionId = localStorage.getItem(SESSION_KEY);
 
-            setStatus("Creating your demo environment...");
-            await cloneDemoData(sessionId);
-          }
+        if (!sessionId) {
+          // New demo session — clone data after auth
+          sessionId = generateSessionId();
+          localStorage.setItem(SESSION_KEY, sessionId);
 
-          setStatus("Signing in...");
-          await signInAsGuest();
-          router.replace("/dashboard");
-        } catch (err: any) {
-          console.error("Demo setup error:", err);
-          // Clear session on failure so retry creates a fresh one
-          localStorage.removeItem(SESSION_KEY);
-          setError(err.message || "Failed to start demo. Please try again.");
+          setStatus("Creating your demo environment...");
+          await cloneDemoData(sessionId);
         }
-      })();
-    }
+
+        router.replace("/dashboard");
+      } catch (err: any) {
+        console.error("Demo setup error:", err);
+        // Clear session on failure so retry creates a fresh one
+        localStorage.removeItem(SESSION_KEY);
+        setError(err.message || "Failed to start demo. Please try again.");
+      }
+    })();
   }, [loading, user, started, signInAsGuest, router]);
 
   return (
