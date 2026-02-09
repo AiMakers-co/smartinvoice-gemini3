@@ -23,6 +23,9 @@ import {
   Sparkles,
   Plus,
   Loader2,
+  Link2,
+  Link2Off,
+  FileCheck,
 } from "lucide-react";
 import { collection, query, where, onSnapshot, orderBy, limit, Timestamp, startAfter, getDocs, getCountFromServer } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -157,6 +160,31 @@ function TransactionRow({ transaction, isExpanded, onToggle }: TransactionRowPro
           </div>
         </td>
 
+        {/* Match Status */}
+        <td className="py-3 px-4 align-top whitespace-nowrap">
+          {transaction.reconciliationStatus === "matched" ? (
+            <Badge className="text-[10px] h-5 bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-50">
+              <Link2 className="h-3 w-3 mr-1" />
+              Matched
+            </Badge>
+          ) : transaction.reconciliationStatus === "suggested" ? (
+            <Badge className="text-[10px] h-5 bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-50">
+              <Sparkles className="h-3 w-3 mr-1" />
+              Suggested
+            </Badge>
+          ) : transaction.reconciliationStatus === "categorized" ? (
+            <Badge className="text-[10px] h-5 bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-50">
+              <FileCheck className="h-3 w-3 mr-1" />
+              Categorized
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="text-[10px] h-5 text-slate-400 border-slate-200">
+              <Link2Off className="h-3 w-3 mr-1" />
+              Unmatched
+            </Badge>
+          )}
+        </td>
+
         {/* Amount */}
         <td className="py-3 px-4 text-right whitespace-nowrap align-top">
           <div className="flex items-center justify-end gap-1.5">
@@ -192,7 +220,7 @@ function TransactionRow({ transaction, isExpanded, onToggle }: TransactionRowPro
       {/* Expanded Details */}
       {isExpanded && (
         <tr className="bg-slate-50 border-b">
-          <td colSpan={6} className="p-4">
+          <td colSpan={7} className="p-4">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div>
                 <p className="text-[10px] text-slate-500 uppercase mb-1">Full Description</p>
@@ -231,6 +259,31 @@ function TransactionRow({ transaction, isExpanded, onToggle }: TransactionRowPro
                 <p className="text-[10px] text-slate-500 uppercase mb-1">Statement ID</p>
                 <p className="text-xs text-slate-900 font-mono truncate">{transaction.statementId}</p>
               </div>
+              {/* Matched Document Info */}
+              {transaction.reconciliationStatus === "matched" && transaction.matchedDocumentNumber && (
+                <div>
+                  <p className="text-[10px] text-slate-500 uppercase mb-1">Matched Document</p>
+                  <div className="flex items-center gap-1.5">
+                    <Link2 className="h-3 w-3 text-emerald-500" />
+                    <p className="text-xs text-slate-900">
+                      {transaction.matchedDocumentType === "invoice" ? "Invoice" : "Bill"} #{transaction.matchedDocumentNumber}
+                    </p>
+                  </div>
+                </div>
+              )}
+              {transaction.matchConfidence != null && (
+                <div>
+                  <p className="text-[10px] text-slate-500 uppercase mb-1">Match Confidence</p>
+                  <div className="flex items-center gap-1">
+                    {transaction.matchConfidence >= 0.85 ? (
+                      <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                    ) : (
+                      <AlertCircle className="h-3 w-3 text-amber-500" />
+                    )}
+                    <p className="text-xs text-slate-900">{Math.round(transaction.matchConfidence * 100)}%</p>
+                  </div>
+                </div>
+              )}
             </div>
           </td>
         </tr>
@@ -316,6 +369,7 @@ export default function TransactionsPage() {
   const [selectedAccount, setSelectedAccount] = useState<string>("all");
   const [dateRange, setDateRange] = useState<string>("all");
   const [transactionType, setTransactionType] = useState<string>("all");
+  const [matchStatus, setMatchStatus] = useState<string>("all");
 
   // Pagination
   const [pageSize] = useState(1000);
@@ -588,6 +642,14 @@ export default function TransactionsPage() {
         filtered = filtered.filter(tx => tx.type === transactionType);
       }
 
+      // Apply match status filter to search results
+      if (matchStatus !== "all") {
+        filtered = filtered.filter(tx => {
+          const status = tx.reconciliationStatus || "unmatched";
+          return status === matchStatus;
+        });
+      }
+
       return filtered;
     }
 
@@ -608,8 +670,16 @@ export default function TransactionsPage() {
       filtered = filtered.filter(tx => tx.type === transactionType);
     }
 
+    // Match status filter
+    if (matchStatus !== "all") {
+      filtered = filtered.filter(tx => {
+        const status = tx.reconciliationStatus || "unmatched";
+        return status === matchStatus;
+      });
+    }
+
     return filtered;
-  }, [allTransactions, searchResults, debouncedSearchQuery, dateRange, transactionType]);
+  }, [allTransactions, searchResults, debouncedSearchQuery, dateRange, transactionType, matchStatus]);
 
   // Calculate summary stats grouped by currency
   const summaryStats = useMemo(() => {
@@ -640,14 +710,28 @@ export default function TransactionsPage() {
     
     const totals = byCurrency[primaryCurrency] || { credits: 0, debits: 0 };
     
-    return { 
-      credits: totals.credits, 
-      debits: totals.debits, 
-      net: totals.credits - totals.debits, 
+    // Count match statuses
+    let matchedCount = 0;
+    let suggestedCount = 0;
+    let unmatchedCount = 0;
+    for (const tx of filteredTransactions) {
+      const status = tx.reconciliationStatus || "unmatched";
+      if (status === "matched") matchedCount++;
+      else if (status === "suggested") suggestedCount++;
+      else unmatchedCount++;
+    }
+
+    return {
+      credits: totals.credits,
+      debits: totals.debits,
+      net: totals.credits - totals.debits,
       loadedCount: filteredTransactions.length,
       currency: primaryCurrency,
       hasMultipleCurrencies: currencies.length > 1,
       byCurrency,
+      matchedCount,
+      suggestedCount,
+      unmatchedCount,
     };
   }, [filteredTransactions]);
 
@@ -722,9 +806,10 @@ export default function TransactionsPage() {
     setSelectedAccount("all");
     setDateRange("all");
     setTransactionType("all");
+    setMatchStatus("all");
   };
 
-  const hasActiveFilters = searchQuery || selectedAccount !== "all" || dateRange !== "all" || transactionType !== "all";
+  const hasActiveFilters = searchQuery || selectedAccount !== "all" || dateRange !== "all" || transactionType !== "all" || matchStatus !== "all";
 
   // Show empty state when no transactions at all
   if (!loading && allTransactions.length === 0) {
@@ -807,6 +892,14 @@ export default function TransactionsPage() {
                 </div>
               )}
             </div>
+            <div className="flex-1 px-3 py-2">
+              <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium">Matched</div>
+              <div className="text-base font-bold text-emerald-600">{summaryStats.matchedCount.toLocaleString()}</div>
+            </div>
+            <div className="flex-1 px-3 py-2">
+              <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium">Unmatched</div>
+              <div className="text-base font-bold text-slate-400">{summaryStats.unmatchedCount.toLocaleString()}</div>
+            </div>
           </div>
         </div>
 
@@ -872,6 +965,20 @@ export default function TransactionsPage() {
                 </SelectContent>
               </Select>
 
+          <Select value={matchStatus} onValueChange={setMatchStatus}>
+            <SelectTrigger className="w-[140px] h-8 text-xs">
+              <Link2 className="h-3.5 w-3.5 mr-1.5 text-slate-400" />
+              <SelectValue placeholder="Match Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" className="text-xs">All Statuses</SelectItem>
+              <SelectItem value="matched" className="text-xs">Matched</SelectItem>
+              <SelectItem value="suggested" className="text-xs">Suggested</SelectItem>
+              <SelectItem value="unmatched" className="text-xs">Unmatched</SelectItem>
+              <SelectItem value="categorized" className="text-xs">Categorized</SelectItem>
+            </SelectContent>
+          </Select>
+
           {hasActiveFilters && (
             <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={clearFilters}>
               <X className="h-3.5 w-3.5 mr-1" />
@@ -925,6 +1032,7 @@ export default function TransactionsPage() {
                     <th className="py-3 px-4 text-left text-[10px] font-medium text-slate-500 uppercase tracking-wider" style={{ width: "110px" }}>Date</th>
                     <th className="py-3 px-4 text-left text-[10px] font-medium text-slate-500 uppercase tracking-wider" style={{ width: "160px" }}>Account</th>
                     <th className="py-3 px-4 text-left text-[10px] font-medium text-slate-500 uppercase tracking-wider">Description</th>
+                    <th className="py-3 px-4 text-left text-[10px] font-medium text-slate-500 uppercase tracking-wider" style={{ width: "110px" }}>Status</th>
                     <th className="py-3 px-4 text-right text-[10px] font-medium text-slate-500 uppercase tracking-wider" style={{ width: "140px" }}>Amount</th>
                     <th className="py-3 px-4 text-right text-[10px] font-medium text-slate-500 uppercase tracking-wider" style={{ width: "150px" }}>Balance</th>
                     <th className="py-3 px-4" style={{ width: "50px" }}></th>

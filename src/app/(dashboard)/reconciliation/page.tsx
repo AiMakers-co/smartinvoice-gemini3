@@ -67,6 +67,15 @@ import { useUploadState } from "@/hooks/use-upload-state";
 // TYPES
 // ============================================
 
+interface CombinedDocument {
+  documentId: string;
+  documentType: "bill" | "invoice";
+  documentNumber: string;
+  counterpartyName: string;
+  amount: number;
+  currency: string;
+}
+
 interface TransactionMatch {
   transactionId: string;
   classification: "payment_match" | "bank_fee" | "transfer" | "no_match" | "needs_review";
@@ -86,6 +95,7 @@ interface TransactionMatch {
   thinkingLevel: "none" | "low" | "high";
   autoConfirmed: boolean;
   ruleBasedScore?: number;
+  combinedDocuments?: CombinedDocument[];
 }
 
 interface ReconcileStep {
@@ -194,10 +204,11 @@ function truncateDescription(desc: string, maxLen: number = 80): string {
 }
 
 // ============================================
-// AI REASONING STREAM — the showpiece
+// AI REASONING DRAWER — right-side slide-over
 // ============================================
 
-function ReasoningStream({
+function ReasoningDrawer({
+  isOpen,
   isRunning,
   events,
   stats,
@@ -205,6 +216,7 @@ function ReasoningStream({
   elapsedMs,
   onClose,
 }: {
+  isOpen: boolean;
   isRunning: boolean;
   events: ProgressEvent[];
   stats: { totalTransactions: number; totalBills: number; totalInvoices: number } | null;
@@ -213,16 +225,12 @@ function ReasoningStream({
   onClose: () => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [isMinimized, setIsMinimized] = useState(false);
 
-  // Auto-scroll to bottom as new events arrive
   useEffect(() => {
-    if (scrollRef.current && !isMinimized) {
+    if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [events.length, isMinimized]);
-
-  if (events.length === 0 && !isRunning) return null;
+  }, [events.length]);
 
   const elapsed = (elapsedMs / 1000).toFixed(1);
 
@@ -259,57 +267,64 @@ function ReasoningStream({
   };
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      {/* Terminal header */}
-      <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-200">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5">
-            <div className="h-3 w-3 rounded-full bg-red-400" />
-            <div className="h-3 w-3 rounded-full bg-amber-400" />
-            <div className="h-3 w-3 rounded-full bg-emerald-400" />
+    <>
+      {/* Backdrop */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 top-11 z-40 bg-black/20 backdrop-blur-[2px] transition-opacity duration-300"
+          onClick={onClose}
+        />
+      )}
+
+      {/* Drawer */}
+      <div
+        className={cn(
+          "fixed top-11 right-0 bottom-0 z-50 w-full sm:w-[440px] lg:w-[500px]",
+          "bg-white shadow-2xl border-l border-slate-200/80",
+          "flex flex-col",
+          "transition-transform duration-300 ease-out",
+          isOpen ? "translate-x-0" : "translate-x-full"
+        )}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 bg-slate-50 border-b border-slate-200 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              <div className="h-2.5 w-2.5 rounded-full bg-red-400" />
+              <div className="h-2.5 w-2.5 rounded-full bg-amber-400" />
+              <div className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
+            </div>
+            <div className="flex items-center gap-2">
+              <Terminal className="h-3.5 w-3.5 text-slate-400" />
+              <span className="text-xs font-mono text-slate-600">AI Engine</span>
+              {isRunning && (
+                <span className="flex items-center gap-1">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-[10px] text-emerald-600 font-mono">LIVE</span>
+                </span>
+              )}
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Terminal className="h-3.5 w-3.5 text-slate-400" />
-            <span className="text-xs font-mono text-slate-600">SmartInvoice AI Engine</span>
-            {isRunning && (
-              <span className="flex items-center gap-1">
-                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-[10px] text-emerald-600 font-mono">LIVE</span>
-              </span>
-            )}
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-[10px] font-mono text-slate-400">{elapsed}s</span>
-          <button
-            onClick={() => setIsMinimized(!isMinimized)}
-            className="text-slate-400 hover:text-slate-600 transition-colors"
-          >
-            {isMinimized ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
-          </button>
-          {!isRunning && (
+          <div className="flex items-center gap-3">
+            <span className="text-[10px] font-mono text-slate-400">{elapsed}s</span>
             <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
               <X className="h-4 w-4" />
             </button>
-          )}
+          </div>
         </div>
-      </div>
 
-      {/* Terminal body */}
-      {!isMinimized && (
+        {/* Terminal body */}
         <div
           ref={scrollRef}
-          className="p-4 font-mono text-[11px] leading-[1.6] max-h-[420px] overflow-y-auto scroll-smooth"
+          className="flex-1 overflow-y-auto p-4 font-mono text-[11px] leading-[1.6]"
           style={{ scrollbarWidth: "thin", scrollbarColor: "#cbd5e1 transparent" }}
         >
-          {/* Init line */}
           {stats && (
             <div className="text-slate-400 mb-2">
               <span className="text-purple-600">$</span> reconcile --mode=ai --engine=gemini-3-flash
             </div>
           )}
 
-          {/* Events */}
           {events.map((event, idx) => {
             const icon = getEventIcon(event.type);
             const style = getEventStyle(event.type);
@@ -320,14 +335,6 @@ function ReasoningStream({
                   <div className="border-b border-slate-200 pb-1 mb-1">
                     {icon} {event.text}
                   </div>
-                </div>
-              );
-            }
-
-            if (event.type === "info" && event.text.includes("complete")) {
-              return (
-                <div key={idx} className={cn("font-mono mt-1", style)}>
-                  {icon} {event.text}
                 </div>
               );
             }
@@ -345,7 +352,6 @@ function ReasoningStream({
             );
           })}
 
-          {/* Cursor blink */}
           {isRunning && (
             <div className="mt-1 flex items-center gap-1">
               <span className="text-purple-600">$</span>
@@ -356,10 +362,10 @@ function ReasoningStream({
           {/* Completion summary */}
           {!isRunning && result && (
             <div className="mt-4 pt-3 border-t border-slate-200">
-              <div className="text-emerald-600 font-bold text-xs mb-2">
+              <div className="text-emerald-600 font-bold text-xs mb-3">
                 ✓ Reconciliation complete — {result.stats.matchRate}% match rate
               </div>
-              <div className="grid grid-cols-4 gap-3 mt-2">
+              <div className="grid grid-cols-2 gap-2">
                 <div className="text-center p-2 rounded-lg bg-emerald-50 border border-emerald-200">
                   <div className="text-lg font-bold text-emerald-600">{result.stats.autoConfirmed}</div>
                   <div className="text-[9px] text-emerald-500 uppercase tracking-wider">Auto-matched</div>
@@ -379,8 +385,29 @@ function ReasoningStream({
                   <div className="text-[9px] text-amber-500 uppercase tracking-wider">Need Review</div>
                 </div>
               </div>
+
+              {/* Pipeline Steps */}
+              {result.steps.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-slate-100">
+                  <div className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-2">Pipeline</div>
+                  <div className="space-y-1">
+                    {result.steps.map((step, i) => (
+                      <div key={i} className={cn(
+                        "flex items-center justify-between px-2 py-1.5 rounded-md text-[11px]",
+                        step.status === "completed" ? "bg-emerald-50" :
+                        step.status === "skipped" ? "bg-slate-50 opacity-50" :
+                        "bg-purple-50"
+                      )}>
+                        <span className="font-medium text-slate-700 capitalize">{step.name.replace(/_/g, " ")}</span>
+                        <span className="text-slate-400 tabular-nums">{step.count} · {(step.timeMs / 1000).toFixed(1)}s</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {result.patternsLearned.length > 0 && (
-                <div className="mt-2 text-[10px] text-emerald-600">
+                <div className="mt-3 text-[10px] text-emerald-600">
                   Patterns updated: {result.patternsLearned.join(", ")}
                 </div>
               )}
@@ -390,8 +417,8 @@ function ReasoningStream({
             </div>
           )}
         </div>
-      )}
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -490,23 +517,26 @@ function StatsCards({
 }
 
 // ============================================
-// TRANSACTION ROW
+// TRANSACTION ROW — shows transaction <> matched document
 // ============================================
 
 function TransactionRow({
   transaction,
+  bills,
+  invoices,
   onConfirm,
   onReject,
   onCategorize,
   isProcessing,
 }: {
   transaction: TransactionWithMatch;
+  bills: IncomingBill[];
+  invoices: OutgoingInvoice[];
   onConfirm: (tx: TransactionWithMatch) => void;
   onReject: (txId: string) => void;
   onCategorize: (txId: string) => void;
   isProcessing: boolean;
 }) {
-  const [showReasoning, setShowReasoning] = useState(false);
   const isCredit = transaction.type === "credit";
   const match = transaction.match;
   const isMatched = transaction.reconciliationStatus === "matched";
@@ -515,180 +545,212 @@ function TransactionRow({
   const isPaymentMatch = match?.classification === "payment_match" && !match.autoConfirmed;
   const isAutoConfirmed = match?.autoConfirmed;
 
-  // Resolve "Unknown" counterparty — extract from description if needed
   const displayCounterparty = match?.counterpartyName && match.counterpartyName !== "Unknown" && match.counterpartyName !== "null"
     ? match.counterpartyName
     : extractEntityName(transaction.description || "") || null;
-  
-  const hasLinkedDocument = match?.documentId != null;
-  const displayDocNumber = match?.documentNumber || null;
+
+  // Look up matched documents — handle both single and combined matches
+  const isCombined = match?.combinedDocuments && match.combinedDocuments.length > 1;
+  const combinedDocs = match?.combinedDocuments || [];
+
+  const matchedDoc = match?.documentId
+    ? match.documentType === "bill"
+      ? bills.find(b => b.id === match.documentId)
+      : invoices.find(inv => inv.id === match.documentId)
+    : null;
+
+  // For combined matches, try to find a meaningful name from the first doc
+  const docName = isCombined
+    ? (combinedDocs[0]?.counterpartyName && combinedDocs[0].counterpartyName !== "Unknown"
+        ? combinedDocs[0].counterpartyName
+        : matchedDoc
+          ? (matchedDoc.direction === "incoming"
+              ? ((matchedDoc as IncomingBill).vendorName || matchedDoc.counterpartyName)
+              : ((matchedDoc as OutgoingInvoice).customerName || matchedDoc.counterpartyName))
+          : displayCounterparty || null)
+    : matchedDoc
+      ? (matchedDoc.direction === "incoming"
+          ? ((matchedDoc as IncomingBill).vendorName || matchedDoc.counterpartyName)
+          : ((matchedDoc as OutgoingInvoice).customerName || matchedDoc.counterpartyName))
+      : match?.counterpartyName || null;
+
+  // Calculate combined total for multi-doc matches
+  const combinedTotal = isCombined
+    ? combinedDocs.reduce((sum, d) => sum + (d.amount || 0), 0)
+    : null;
+
+  const hasMatchedDoc = !!(isPaymentMatch || isAutoConfirmed || isMatched) && (matchedDoc || match?.documentNumber);
+
+  // Bank fees & transfers: simple single line
+  if (isBankFee || isTransfer) {
+    return (
+      <div className="flex items-center gap-3 px-4 py-2 border-b last:border-0 text-sm opacity-50">
+        <div className="h-6 w-6 rounded bg-slate-100 flex items-center justify-center shrink-0">
+          {isBankFee ? <CreditCard className="h-3 w-3 text-slate-400" /> : <RefreshCw className="h-3 w-3 text-slate-400" />}
+        </div>
+        <span className="text-xs text-slate-400 w-[72px] shrink-0 tabular-nums">{formatFullDate(transaction.date)}</span>
+        <span className="truncate text-slate-400 font-medium min-w-0 flex-1">
+          {transaction.description?.split(" ").slice(0, 5).join(" ") || (isBankFee ? "Bank Fee" : "Transfer")}
+        </span>
+        <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
+          {isBankFee ? "Fee" : "Transfer"}
+        </span>
+        <span className="text-sm font-semibold tabular-nums w-[100px] text-right shrink-0 text-slate-400">
+          {isCredit ? "+" : "-"}{formatCurrency(Math.abs(transaction.amount), transaction.currency || "USD")}
+        </span>
+        <span className="w-[60px] shrink-0" />
+      </div>
+    );
+  }
 
   return (
     <div className={cn(
-      "border-b last:border-0 transition-colors",
+      "flex items-center gap-2 px-4 py-2.5 border-b last:border-0 text-sm transition-colors",
       isMatched && "bg-emerald-50/30",
       isAutoConfirmed && "bg-emerald-50/30",
-      isBankFee && "bg-slate-50/50 opacity-60",
-      isTransfer && "bg-slate-50/50 opacity-60",
-      isPaymentMatch && "hover:bg-slate-50/50",
+      isPaymentMatch && "hover:bg-slate-50",
     )}>
-      <div className="flex items-center gap-3 px-4 py-3">
-        {/* Icon */}
+      {/* LEFT SIDE: Bank Transaction */}
+      <div className="flex items-center gap-2 min-w-0 flex-1">
+        {/* Direction icon */}
         <div className={cn(
-          "h-8 w-8 rounded-lg flex items-center justify-center shrink-0",
-          isBankFee || isTransfer ? "bg-slate-100" : isCredit ? "bg-emerald-50" : "bg-orange-50"
+          "h-6 w-6 rounded flex items-center justify-center shrink-0",
+          isCredit ? "bg-emerald-50" : "bg-orange-50"
         )}>
-          {isBankFee ? (
-            <CreditCard className="h-4 w-4 text-slate-400" />
-          ) : isTransfer ? (
-            <RefreshCw className="h-4 w-4 text-slate-400" />
-          ) : isCredit ? (
-            <ArrowDownRight className="h-4 w-4 text-emerald-600" />
-          ) : (
-            <ArrowUpRight className="h-4 w-4 text-orange-600" />
-          )}
+          {isCredit ? <ArrowDownRight className="h-3 w-3 text-emerald-600" /> : <ArrowUpRight className="h-3 w-3 text-orange-600" />}
         </div>
 
-        {/* Main content */}
-        <div className="flex-1 min-w-0">
-          {/* Top row: description + badges */}
-          <div className="flex items-center gap-2">
-            {/* Show entity name if available, else truncated description */}
-            <p className={cn(
-              "text-sm font-medium truncate",
-              (isBankFee || isTransfer) ? "text-slate-400" : "text-slate-900"
-            )}>
-              {isBankFee ? (transaction.description?.split(" ").slice(0, 4).join(" ") || "Bank Fee")
-                : displayCounterparty || truncateDescription(transaction.description || "", 60)}
-            </p>
-            {isBankFee && (
-              <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">Bank Fee</span>
-            )}
-            {isTransfer && (
-              <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">Transfer</span>
-            )}
-          </div>
+        {/* Date */}
+        <span className="text-xs text-slate-400 w-[68px] shrink-0 tabular-nums">
+          {formatFullDate(transaction.date)}
+        </span>
 
-          {/* Date + reference line */}
-          <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400">
-            <span>{formatFullDate(transaction.date)}</span>
-            {displayCounterparty && !isBankFee && (
-              <span className="truncate text-slate-400 max-w-[300px]">
-                {truncateDescription(transaction.description || "", 50)}
+        {/* Name */}
+        <span className="truncate font-medium text-slate-900 min-w-0 flex-1">
+          {displayCounterparty || truncateDescription(transaction.description || "", 30)}
+        </span>
+
+        {/* Transaction amount */}
+        <span className={cn(
+          "text-sm font-semibold tabular-nums shrink-0",
+          isCredit ? "text-emerald-600" : "text-slate-900"
+        )}>
+          {isCredit ? "+" : "-"}{formatCurrency(Math.abs(transaction.amount), transaction.currency || "USD")}
+        </span>
+      </div>
+
+      {/* CENTER: Match indicator */}
+      <div className="flex items-center gap-1 shrink-0 px-1">
+        {hasMatchedDoc ? (
+          <div className="flex items-center gap-1">
+            <span className={cn(
+              "text-[10px] font-bold px-1.5 py-0.5 rounded",
+              isMatched && !isAutoConfirmed ? "bg-emerald-100 text-emerald-700" :
+              isAutoConfirmed ? "bg-emerald-100 text-emerald-700" :
+              match && match.confidence >= 90 ? "bg-emerald-100 text-emerald-700" :
+              match && match.confidence >= 75 ? "bg-purple-100 text-purple-700" :
+              "bg-amber-100 text-amber-700"
+            )}>
+              {isMatched && !isAutoConfirmed ? <CheckCircle2 className="h-3 w-3 inline" /> :
+               isAutoConfirmed ? <Zap className="h-3 w-3 inline" /> :
+               `${match?.confidence}%`}
+            </span>
+            <Link2 className="h-3 w-3 text-slate-300" />
+          </div>
+        ) : (
+          <span className="w-[52px] flex justify-center">
+            <span className="text-slate-200">—</span>
+          </span>
+        )}
+      </div>
+
+      {/* RIGHT SIDE: Matched Document(s) */}
+      <div className="flex items-center gap-2 min-w-0 flex-1">
+        {hasMatchedDoc ? (
+          <>
+            {/* Doc icon */}
+            <div className={cn(
+              "h-6 w-6 rounded flex items-center justify-center shrink-0",
+              match?.documentType === "bill" ? "bg-orange-50" : "bg-blue-50"
+            )}>
+              {match?.documentType === "bill"
+                ? <FileSpreadsheet className="h-3 w-3 text-orange-500" />
+                : <FileCheck className="h-3 w-3 text-blue-500" />}
+            </div>
+
+            {isCombined ? (
+              <>
+                {/* Combined match: show count + doc numbers */}
+                <span className="text-[10px] font-medium text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded shrink-0">
+                  {combinedDocs.length} docs
+                </span>
+                <span className="text-xs font-mono text-slate-500 truncate min-w-0 flex-1" title={match?.documentNumber || ""}>
+                  {match?.documentNumber || "—"}
+                </span>
+                {/* Combined total */}
+                <span className="text-sm font-semibold tabular-nums shrink-0 text-slate-700">
+                  {combinedTotal ? formatCurrency(combinedTotal, combinedDocs[0]?.currency || "USD") : ""}
+                </span>
+              </>
+            ) : (
+              <>
+                {/* Single match: doc number + name + amount */}
+                <span className="text-xs font-mono text-slate-500 shrink-0">
+                  {match?.documentNumber || "—"}
+                </span>
+                <span className="truncate text-slate-700 min-w-0 flex-1">
+                  {docName || displayCounterparty || "—"}
+                </span>
+                <span className="text-sm font-semibold tabular-nums shrink-0 text-slate-700">
+                  {matchedDoc ? formatCurrency(matchedDoc.total, matchedDoc.currency || "USD") : ""}
+                </span>
+              </>
+            )}
+
+            {/* FX indicator */}
+            {match?.fxDetails && (
+              <span className="text-[9px] text-purple-500 bg-purple-50 px-1 py-0.5 rounded shrink-0">
+                FX {match.fxDetails.rate.toFixed(2)}
               </span>
             )}
-          </div>
+          </>
+        ) : !match && !isMatched ? (
+          <span className="text-xs text-slate-400 italic">No match found</span>
+        ) : (
+          <span className="text-xs text-slate-400 italic">—</span>
+        )}
+      </div>
 
-          {/* AI Match Suggestion — clean card */}
-          {isPaymentMatch && match && (
-            <div className={cn(
-              "mt-2 p-2.5 rounded-lg border",
-              hasLinkedDocument ? "bg-emerald-50/50 border-emerald-200" : "bg-purple-50/50 border-purple-200"
-            )}>
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 min-w-0">
-                  {/* Confidence pill */}
-                  <div className={cn(
-                    "h-7 min-w-[42px] rounded-md flex items-center justify-center text-xs font-bold shrink-0",
-                    match.confidence >= 90 ? "bg-emerald-100 text-emerald-700" :
-                    match.confidence >= 75 ? "bg-purple-100 text-purple-700" :
-                    "bg-amber-100 text-amber-700"
-                  )}>
-                    {match.confidence}%
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      {displayDocNumber && (
-                        <span className="text-xs font-semibold text-slate-800 font-mono">{displayDocNumber}</span>
-                      )}
-                      {displayCounterparty && (
-                        <span className="text-xs text-slate-500">{displayCounterparty}</span>
-                      )}
-                      {!hasLinkedDocument && displayDocNumber && (
-                        <span className="text-[9px] text-amber-600 bg-amber-50 border border-amber-200 px-1 py-0.5 rounded shrink-0">
-                          Ref only
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-slate-500 mt-0.5 truncate">{match.reasoning[0]}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {match.reasoning.length > 1 && (
-                    <button
-                      onClick={() => setShowReasoning(!showReasoning)}
-                      className="h-7 w-7 rounded-md border border-slate-200 flex items-center justify-center hover:bg-white transition-colors"
-                      title="Show reasoning"
-                    >
-                      <Eye className="h-3.5 w-3.5 text-slate-400" />
-                    </button>
-                  )}
-                  <Button
-                    size="sm"
-                    className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700"
-                    onClick={() => onConfirm(transaction)}
-                    disabled={isProcessing}
-                  >
-                    <Check className="h-3.5 w-3.5 mr-1" /> Confirm
-                  </Button>
-                  <Button
-                    size="sm" variant="outline" className="h-7 w-7 p-0"
-                    onClick={() => onReject(transaction.id)}
-                    disabled={isProcessing}
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </div>
-              {/* Expandable reasoning */}
-              {showReasoning && match.reasoning.length > 1 && (
-                <div className="mt-2 pt-2 border-t border-slate-200/60 space-y-0.5">
-                  {match.reasoning.map((step, i) => (
-                    <p key={i} className="text-[11px] text-slate-500">
-                      <span className="text-slate-400 font-mono mr-1">{i + 1}.</span> {step}
-                    </p>
-                  ))}
-                </div>
-              )}
-              {match.fxDetails && (
-                <div className="mt-1.5 text-[10px] text-purple-600 flex items-center gap-1">
-                  <RefreshCw className="h-3 w-3" />
-                  {match.fxDetails.fromCurrency} → {match.fxDetails.toCurrency} @ {match.fxDetails.rate.toFixed(4)}
-                </div>
-              )}
-            </div>
-          )}
-
-          {(isBankFee || isTransfer) && match && (
-            <p className="text-[11px] text-slate-400 mt-0.5 italic">{match.reasoning[0]}</p>
-          )}
-
-          {isAutoConfirmed && match && (
-            <div className="mt-1 flex items-center gap-1.5 text-[11px] text-emerald-600">
-              <Zap className="h-3 w-3" />
-              Auto-matched to {match.documentNumber} ({match.confidence}%)
-            </div>
-          )}
-
-          {!match && !isMatched && (
-            <Button
-              size="sm" variant="ghost" className="h-6 text-[11px] text-slate-400 mt-1 px-2"
-              onClick={() => onCategorize(transaction.id)}
+      {/* ACTIONS */}
+      <div className="flex items-center gap-1 shrink-0 w-[60px] justify-end">
+        {isPaymentMatch && match && (
+          <>
+            <button
+              onClick={() => onConfirm(transaction)}
+              disabled={isProcessing}
+              className="h-6 w-6 rounded bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center transition-colors disabled:opacity-50"
+              title="Confirm match"
             >
-              <Tag className="h-3 w-3 mr-1" /> Categorize
-            </Button>
-          )}
-        </div>
-
-        {/* Amount */}
-        <div className="text-right shrink-0">
-          <p className={cn(
-            "text-sm font-semibold tabular-nums",
-            isCredit ? "text-emerald-600" : (isBankFee || isTransfer) ? "text-slate-400" : "text-slate-900"
-          )}>
-            {isCredit ? "+" : "-"}{formatCurrency(Math.abs(transaction.amount), transaction.currency || "USD")}
-          </p>
-        </div>
+              <Check className="h-3 w-3" />
+            </button>
+            <button
+              onClick={() => onReject(transaction.id)}
+              disabled={isProcessing}
+              className="h-6 w-6 rounded border border-slate-200 hover:bg-slate-50 text-slate-400 flex items-center justify-center transition-colors disabled:opacity-50"
+              title="Dismiss"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </>
+        )}
+        {!match && !isMatched && (
+          <button
+            onClick={() => onCategorize(transaction.id)}
+            className="h-6 px-2 rounded border border-slate-200 hover:bg-slate-50 text-[10px] text-slate-400 flex items-center gap-1 transition-colors"
+          >
+            <Tag className="h-3 w-3" /> Tag
+          </button>
+        )}
       </div>
     </div>
   );
@@ -834,6 +896,7 @@ export default function ReconciliationPage() {
   const [streamStats, setStreamStats] = useState<{ totalTransactions: number; totalBills: number; totalInvoices: number } | null>(null);
   const [pipelineResult, setPipelineResult] = useState<ReconcileResult | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
+  const [showTerminal, setShowTerminal] = useState(false);
   const elapsedInterval = useRef<NodeJS.Timeout | null>(null);
   const startTimeRef = useRef<number>(0);
   const unsubProgressRef = useRef<(() => void) | null>(null);
@@ -885,6 +948,8 @@ export default function ReconciliationPage() {
         };
       }) as OutgoingInvoice[];
       setInvoices(docs);
+    }, (err) => {
+      console.error("Failed to load invoices:", err);
     });
 
     const billsQuery = query(
@@ -894,11 +959,22 @@ export default function ReconciliationPage() {
     );
 
     const unsubBills = onSnapshot(billsQuery, (snapshot) => {
-      const docs = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as IncomingBill[];
+      const docs = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          documentNumber: data.documentNumber || data.invoiceNumber || "Unknown",
+          documentDate: data.documentDate || data.invoiceDate,
+          amountRemaining: data.amountRemaining ?? data.amountDue ?? data.total ?? 0,
+          vendorName: data.vendorName || data.counterpartyName || "Unknown",
+          total: data.total || 0,
+          currency: data.currency || "USD",
+        };
+      }) as IncomingBill[];
       setBills(docs);
+    }, (err) => {
+      console.error("Failed to load bills:", err);
     });
 
     return () => {
@@ -937,6 +1013,7 @@ export default function ReconciliationPage() {
     setStreamStats(null);
     setPipelineResult(null);
     setElapsedMs(0);
+    setShowTerminal(true);
 
     // Start timer
     startTimeRef.current = Date.now();
@@ -1084,14 +1161,19 @@ export default function ReconciliationPage() {
 
     try {
       const confirmMatch = httpsCallable(functions, "confirmMatchV2");
-      await confirmMatch({
+      const matchData: any = {
         transactionId: selectedTransaction.id,
         documentId: selectedTransaction.match.documentId,
         documentType: selectedTransaction.match.documentType,
         matchConfidence: selectedTransaction.match.confidence,
         matchMethod: `ai_${selectedTransaction.match.thinkingLevel}`,
         fxRate: selectedTransaction.match.fxDetails?.rate,
-      });
+      };
+      // For combined matches, send all documents
+      if (selectedTransaction.match.combinedDocuments?.length) {
+        matchData.combinedDocuments = selectedTransaction.match.combinedDocuments;
+      }
+      await confirmMatch(matchData);
 
       setTransactions(prev => prev.map(tx =>
         tx.id === selectedTransaction.id
@@ -1116,6 +1198,71 @@ export default function ReconciliationPage() {
     ));
     toast.info("Suggestion dismissed");
   }, []);
+
+  // Batch confirm all matches at or above a confidence threshold
+  const [isBatchConfirming, setIsBatchConfirming] = useState(false);
+  const handleBatchConfirm = useCallback(async (minConfidence: number) => {
+    if (!user?.id) return;
+
+    const eligible = transactions.filter(tx => {
+      const m = tx.match;
+      if (!m || m.classification !== "payment_match" || m.autoConfirmed) return false;
+      if (tx.reconciliationStatus === "matched") return false;
+      if ((m.confidence ?? 0) < minConfidence) return false;
+      // Must have a valid document reference — either a documentId+documentType or combinedDocuments
+      const hasSingleDoc = m.documentId && m.documentType;
+      const hasCombinedDocs = m.combinedDocuments && m.combinedDocuments.length > 0;
+      return hasSingleDoc || hasCombinedDocs;
+    });
+
+    if (eligible.length === 0) {
+      toast.info("No matches at that confidence level");
+      return;
+    }
+
+    setIsBatchConfirming(true);
+    const confirmMatch = httpsCallable(functions, "confirmMatchV2");
+    let confirmed = 0;
+    let failed = 0;
+
+    // Process in parallel batches of 5
+    for (let i = 0; i < eligible.length; i += 5) {
+      const batch = eligible.slice(i, i + 5);
+      const results = await Promise.allSettled(
+        batch.map(tx => {
+          const payload: any = {
+            transactionId: tx.id,
+            documentId: tx.match!.documentId,
+            documentType: tx.match!.documentType,
+            matchConfidence: tx.match!.confidence,
+            matchMethod: `ai_${tx.match!.thinkingLevel}`,
+            fxRate: tx.match!.fxDetails?.rate,
+          };
+          if (tx.match!.combinedDocuments?.length) {
+            payload.combinedDocuments = tx.match!.combinedDocuments;
+          }
+          return confirmMatch(payload);
+        })
+      );
+      results.forEach((r, j) => {
+        if (r.status === "fulfilled") {
+          confirmed++;
+          const txId = batch[j].id;
+          setTransactions(prev => prev.map(tx =>
+            tx.id === txId
+              ? { ...tx, reconciliationStatus: "matched" as any, match: { ...tx.match!, autoConfirmed: true } }
+              : tx
+          ));
+        } else {
+          failed++;
+        }
+      });
+    }
+
+    setIsBatchConfirming(false);
+    if (confirmed > 0) toast.success(`${confirmed} match${confirmed !== 1 ? "es" : ""} confirmed!`);
+    if (failed > 0) toast.error(`${failed} failed to confirm`);
+  }, [user?.id, transactions]);
 
   const handleCategorize = useCallback(async (txId: string) => {
     if (!user?.id) return;
@@ -1156,9 +1303,7 @@ export default function ReconciliationPage() {
 
   const suggestedCount = transactions.filter(tx => {
     const isPaymentMatch = tx.match?.classification === "payment_match" && !tx.match.autoConfirmed;
-    const isBankFee = tx.match?.classification === "bank_fee";
-    const isTransfer = tx.match?.classification === "transfer";
-    return (isPaymentMatch || isBankFee || isTransfer) && tx.reconciliationStatus !== "matched";
+    return isPaymentMatch && tx.reconciliationStatus !== "matched";
   }).length;
 
   const matchedCount = transactions.filter(tx =>
@@ -1222,137 +1367,30 @@ export default function ReconciliationPage() {
           </div>
         )}
 
-        {/* AI Reasoning Stream — THE SHOWPIECE */}
-        <ReasoningStream
-          isRunning={isReconciling}
-          events={streamEvents}
-          stats={streamStats}
-          result={pipelineResult}
-          elapsedMs={elapsedMs}
-          onClose={() => {
-            setStreamEvents([]);
-            setPipelineResult(null);
-          }}
-        />
-
-        {/* Visual Results Summary — appears after reconciliation */}
+        {/* Compact results bar */}
         {!isReconciling && pipelineResult && (
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-purple-200">
-                  <Brain className="h-5 w-5 text-white" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-900">AI Reconciliation Results</h3>
-                  <p className="text-xs text-slate-500">
-                    {pipelineResult.stats.totalTransactions} transactions processed in {(pipelineResult.processingTimeMs / 1000).toFixed(1)}s
-                  </p>
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="text-2xl font-bold text-slate-900">{pipelineResult.stats.matchRate}%</div>
-                <div className="text-[10px] text-slate-500 uppercase tracking-wider">Match Rate</div>
-              </div>
+          <div className="flex items-center gap-4 px-4 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-xs">
+            <div className="flex items-center gap-2">
+              <Brain className="h-4 w-4 text-purple-600" />
+              <span className="font-semibold text-slate-900">{pipelineResult.stats.matchRate}% matched</span>
             </div>
-
-            {/* Match rate progress bar */}
-            <div className="h-3 rounded-full bg-slate-100 overflow-hidden mb-4">
+            <div className="h-2 flex-1 rounded-full bg-slate-200 overflow-hidden max-w-[200px]">
               <div className="h-full flex">
-                <div
-                  className="bg-emerald-500 transition-all duration-1000"
-                  style={{ width: `${(pipelineResult.stats.autoConfirmed / Math.max(pipelineResult.stats.totalTransactions, 1)) * 100}%` }}
-                  title="Auto-confirmed"
-                />
-                <div
-                  className="bg-purple-500 transition-all duration-1000"
-                  style={{ width: `${((pipelineResult.stats.aiMatches + pipelineResult.stats.deepMatches) / Math.max(pipelineResult.stats.totalTransactions, 1)) * 100}%` }}
-                  title="AI suggestions"
-                />
-                <div
-                  className="bg-slate-300 transition-all duration-1000"
-                  style={{ width: `${(pipelineResult.stats.bankFees / Math.max(pipelineResult.stats.totalTransactions, 1)) * 100}%` }}
-                  title="Bank fees"
-                />
-                <div
-                  className="bg-amber-400 transition-all duration-1000"
-                  style={{ width: `${(pipelineResult.stats.needsReview / Math.max(pipelineResult.stats.totalTransactions, 1)) * 100}%` }}
-                  title="Needs review"
-                />
+                <div className="bg-emerald-500" style={{ width: `${(pipelineResult.stats.autoConfirmed / Math.max(pipelineResult.stats.totalTransactions, 1)) * 100}%` }} />
+                <div className="bg-purple-500" style={{ width: `${((pipelineResult.stats.aiMatches + pipelineResult.stats.deepMatches) / Math.max(pipelineResult.stats.totalTransactions, 1)) * 100}%` }} />
+                <div className="bg-slate-300" style={{ width: `${(pipelineResult.stats.bankFees / Math.max(pipelineResult.stats.totalTransactions, 1)) * 100}%` }} />
               </div>
             </div>
-
-            {/* Legend */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-              <div className="flex items-center gap-2">
-                <div className="h-3 w-3 rounded-full bg-emerald-500 shrink-0" />
-                <div>
-                  <div className="text-sm font-semibold text-slate-900">{pipelineResult.stats.autoConfirmed}</div>
-                  <div className="text-[10px] text-slate-500">Auto-confirmed</div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="h-3 w-3 rounded-full bg-purple-500 shrink-0" />
-                <div>
-                  <div className="text-sm font-semibold text-slate-900">{pipelineResult.stats.aiMatches + pipelineResult.stats.deepMatches}</div>
-                  <div className="text-[10px] text-slate-500">AI Suggestions</div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="h-3 w-3 rounded-full bg-slate-300 shrink-0" />
-                <div>
-                  <div className="text-sm font-semibold text-slate-900">{pipelineResult.stats.bankFees}</div>
-                  <div className="text-[10px] text-slate-500">Bank Fees</div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="h-3 w-3 rounded-full bg-amber-400 shrink-0" />
-                <div>
-                  <div className="text-sm font-semibold text-slate-900">{pipelineResult.stats.needsReview}</div>
-                  <div className="text-[10px] text-slate-500">Needs Review</div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="h-3 w-3 rounded-full bg-red-400 shrink-0" />
-                <div>
-                  <div className="text-sm font-semibold text-slate-900">{pipelineResult.stats.noMatch}</div>
-                  <div className="text-[10px] text-slate-500">No Match</div>
-                </div>
-              </div>
-            </div>
-
-            {/* AI Pipeline Steps */}
-            {pipelineResult.steps.length > 0 && (
-              <div className="mt-4 pt-4 border-t border-slate-100">
-                <div className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-2">Pipeline Steps</div>
-                <div className="flex gap-2">
-                  {pipelineResult.steps.map((step, i) => (
-                    <div key={i} className={cn(
-                      "flex-1 p-2 rounded-lg border text-center",
-                      step.status === "completed" ? "bg-emerald-50 border-emerald-200" :
-                      step.status === "skipped" ? "bg-slate-50 border-slate-200 opacity-50" :
-                      "bg-purple-50 border-purple-200"
-                    )}>
-                      <div className="text-[10px] font-medium text-slate-700 capitalize">
-                        {step.name.replace(/_/g, " ")}
-                      </div>
-                      <div className="text-xs font-bold text-slate-900 mt-0.5">{step.count}</div>
-                      <div className="text-[9px] text-slate-400">{(step.timeMs / 1000).toFixed(1)}s</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Patterns learned */}
-            {pipelineResult.patternsLearned.length > 0 && (
-              <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-2">
-                <Brain className="h-3.5 w-3.5 text-purple-500" />
-                <span className="text-[11px] text-purple-600 font-medium">
-                  Patterns learned: {pipelineResult.patternsLearned.join(", ")}
-                </span>
-              </div>
-            )}
+            <span className="text-emerald-600">{pipelineResult.stats.autoConfirmed} auto</span>
+            <span className="text-purple-600">{pipelineResult.stats.aiMatches + pipelineResult.stats.deepMatches} suggested</span>
+            <span className="text-slate-400">{pipelineResult.stats.bankFees} fees</span>
+            <span className="text-amber-500">{pipelineResult.stats.needsReview} review</span>
+            <button
+              onClick={() => setShowTerminal(true)}
+              className="ml-auto text-purple-600 hover:text-purple-700 font-medium flex items-center gap-1"
+            >
+              <Terminal className="h-3 w-3" /> Details
+            </button>
           </div>
         )}
 
@@ -1385,6 +1423,60 @@ export default function ReconciliationPage() {
           </Tabs>
 
           <div className="flex items-center gap-2">
+            {/* Batch accept by confidence — only on Suggested tab */}
+            {activeTab === "suggested" && suggestedCount > 0 && (() => {
+              const at90 = transactions.filter(tx => tx.match?.classification === "payment_match" && !tx.match.autoConfirmed && tx.reconciliationStatus !== "matched" && (tx.match?.confidence ?? 0) >= 90).length;
+              const at75 = transactions.filter(tx => tx.match?.classification === "payment_match" && !tx.match.autoConfirmed && tx.reconciliationStatus !== "matched" && (tx.match?.confidence ?? 0) >= 75).length;
+              const at50 = transactions.filter(tx => tx.match?.classification === "payment_match" && !tx.match.autoConfirmed && tx.reconciliationStatus !== "matched" && (tx.match?.confidence ?? 0) >= 50).length;
+              return (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" disabled={isBatchConfirming} className="gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50">
+                      {isBatchConfirming ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                      Accept All
+                      <ChevronDown className="h-3 w-3" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {at90 > 0 && (
+                      <DropdownMenuItem onClick={() => handleBatchConfirm(90)}>
+                        <span className="h-2 w-2 rounded-full bg-emerald-500 mr-2" />
+                        Accept {at90} at 90%+ confidence
+                      </DropdownMenuItem>
+                    )}
+                    {at75 > 0 && (
+                      <DropdownMenuItem onClick={() => handleBatchConfirm(75)}>
+                        <span className="h-2 w-2 rounded-full bg-purple-500 mr-2" />
+                        Accept {at75} at 75%+ confidence
+                      </DropdownMenuItem>
+                    )}
+                    {at50 > 0 && (
+                      <DropdownMenuItem onClick={() => handleBatchConfirm(50)}>
+                        <span className="h-2 w-2 rounded-full bg-amber-500 mr-2" />
+                        Accept {at50} at 50%+ confidence
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem onClick={() => handleBatchConfirm(0)}>
+                      <span className="h-2 w-2 rounded-full bg-slate-400 mr-2" />
+                      Accept all {suggestedCount} suggestions
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              );
+            })()}
+
+            {/* Terminal toggle — show when there are events or results */}
+            {(streamEvents.length > 0 || pipelineResult) && (
+              <Button
+                variant="outline" size="sm"
+                onClick={() => setShowTerminal(true)}
+                className="gap-1.5"
+              >
+                <Terminal className="h-3.5 w-3.5" />
+                AI Log
+                {isReconciling && <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />}
+              </Button>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm">
@@ -1426,6 +1518,25 @@ export default function ReconciliationPage() {
 
         {/* Transaction List */}
         <Card>
+          {/* Table header */}
+          {filteredTransactions.length > 0 && (
+            <div className="flex items-center gap-2 px-4 py-2 border-b border-slate-200 bg-slate-50 text-[10px] font-medium text-slate-400 uppercase tracking-wider">
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <span className="w-6 shrink-0" />
+                <span className="w-[68px] shrink-0">Date</span>
+                <span className="flex-1 min-w-0">Transaction</span>
+                <span className="shrink-0">Amount</span>
+              </div>
+              <span className="w-[52px] shrink-0 text-center px-1">Match</span>
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <span className="w-6 shrink-0" />
+                <span className="shrink-0">Doc #</span>
+                <span className="flex-1 min-w-0">Counterparty</span>
+                <span className="shrink-0">Doc Amt</span>
+              </div>
+              <span className="w-[60px] text-right shrink-0">Actions</span>
+            </div>
+          )}
           <div className="max-h-[calc(100vh-420px)] overflow-auto">
             {filteredTransactions.length === 0 ? (
               <div className="p-12 text-center">
@@ -1467,6 +1578,8 @@ export default function ReconciliationPage() {
                 <TransactionRow
                   key={tx.id}
                   transaction={tx}
+                  bills={bills}
+                  invoices={invoices}
                   onConfirm={handleConfirmClick}
                   onReject={handleReject}
                   onCategorize={handleCategorize}
@@ -1492,6 +1605,17 @@ export default function ReconciliationPage() {
           </div>
         </div>
       </div>
+
+      {/* AI Reasoning Drawer */}
+      <ReasoningDrawer
+        isOpen={showTerminal}
+        isRunning={isReconciling}
+        events={streamEvents}
+        stats={streamStats}
+        result={pipelineResult}
+        elapsedMs={elapsedMs}
+        onClose={() => setShowTerminal(false)}
+      />
 
       {/* Confirm Modal */}
       <ConfirmMatchModal

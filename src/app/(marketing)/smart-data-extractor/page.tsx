@@ -45,7 +45,7 @@ type DemoStep =
   | "analyzing"
   | "complete"
   | "error"
-  | "rate_limited";
+;
 
 interface DocumentMetadataItem {
   label: string;
@@ -502,18 +502,11 @@ function DemoToolSection() {
 
       clearTimeout(timeoutId);
 
-      if (!response.ok && response.status !== 429) {
+      if (!response.ok) {
         throw new Error(`Server error: ${response.status}`);
       }
 
       const data: ExtractResult = await response.json();
-
-      if (response.status === 429) {
-        stopTimer();
-        setStep("rate_limited");
-        setResult(data);
-        return;
-      }
 
       if (!data.success) {
         throw new Error(data.error || "Extraction failed");
@@ -603,7 +596,7 @@ function DemoToolSection() {
     onDrop: (files) => { if (files[0]) processFile(files[0]); },
     accept: { "application/pdf": [".pdf"], "image/*": [".png", ".jpg", ".jpeg", ".webp"] },
     maxFiles: 1,
-    disabled: !["idle", "complete", "error", "rate_limited"].includes(step),
+    disabled: !["idle", "complete", "error"].includes(step),
   });
 
   const getDocTypeStyle = (docType?: string) => {
@@ -720,7 +713,7 @@ function DemoToolSection() {
             </div>
             
             {/* Content */}
-            <div className="p-6 flex flex-col relative" style={{ minHeight: "440px" }}>
+            <div className="p-6 flex flex-col relative" style={{ minHeight: "600px" }}>
             
             {/* IDLE */}
             {step === "idle" && (
@@ -750,14 +743,6 @@ function DemoToolSection() {
                   </div>
                 </div>
 
-                {/* Demo used overlay - hidden on localhost */}
-                {hasUsedDemo && !isLocalhost && (
-                  <div className="absolute bottom-4 left-4 right-4 flex items-center justify-center gap-2 py-2.5 px-4 bg-amber-50/95 backdrop-blur-sm rounded-lg border border-amber-200/60">
-                    <span className="text-sm text-amber-700">Demo limit reached</span>
-                    <span className="text-amber-400">•</span>
-                    <span className="text-sm text-amber-600">You can still try again</span>
-                  </div>
-                )}
               </div>
             )}
 
@@ -830,7 +815,7 @@ function DemoToolSection() {
 
                   {/* Data table */}
                   <div className="flex-1 border rounded-lg overflow-hidden mb-4">
-                    <div className="overflow-auto" style={{ maxHeight: "180px" }}>
+                    <div className="overflow-auto" style={{ maxHeight: "500px" }}>
                       <table className="w-full text-xs">
                         <thead className="bg-slate-50 sticky top-0">
                           <tr>
@@ -845,7 +830,7 @@ function DemoToolSection() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {result.rows.slice(0, 6).map((row, i) => (
+                          {result.rows.map((row, i) => (
                             <tr key={i} className="hover:bg-slate-50">
                               {result.headers!.slice(0, 5).map((h) => {
                                 const val = row[h.name];
@@ -912,22 +897,6 @@ function DemoToolSection() {
               </div>
             )}
 
-            {/* RATE LIMITED */}
-            {step === "rate_limited" && (
-              <div className="h-full flex flex-col items-center justify-center py-8 text-center">
-                <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4" style={{ backgroundColor: `${brand.colors.primary}15` }}>
-                  <Sparkles className="w-7 h-7" style={{ color: brand.colors.primary }} />
-                </div>
-                <p className="font-semibold text-slate-900 mb-1">Demo limit reached</p>
-                <p className="text-sm text-slate-500 mb-4 max-w-xs">Sign up for unlimited extractions</p>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={reset}>Try later</Button>
-                  <Link href="/login">
-                    <Button size="sm" style={{ backgroundColor: brand.colors.primary }} className="text-white">Sign up <ArrowRight className="w-4 h-4 ml-1" /></Button>
-                  </Link>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Footer */}

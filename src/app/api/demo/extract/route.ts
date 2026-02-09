@@ -9,56 +9,9 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
-// Simple in-memory rate limiting (in production, use Redis)
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
-const RATE_LIMIT_MAX = 3; // 3 extractions per day per IP
-const RATE_LIMIT_WINDOW = 24 * 60 * 60 * 1000; // 24 hours
-
-function getClientIP(request: NextRequest): string {
-  const forwardedFor = request.headers.get("x-forwarded-for");
-  const realIP = request.headers.get("x-real-ip");
-  
-  if (forwardedFor) {
-    return forwardedFor.split(",")[0].trim();
-  }
-  if (realIP) {
-    return realIP;
-  }
-  return "unknown";
-}
-
-function checkRateLimit(ip: string): { allowed: boolean; remaining: number } {
-  const now = Date.now();
-  const record = rateLimitMap.get(ip);
-  
-  if (!record || now > record.resetAt) {
-    rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW });
-    return { allowed: true, remaining: RATE_LIMIT_MAX - 1 };
-  }
-  
-  if (record.count >= RATE_LIMIT_MAX) {
-    return { allowed: false, remaining: 0 };
-  }
-  
-  record.count++;
-  return { allowed: true, remaining: RATE_LIMIT_MAX - record.count };
-}
 
 export async function POST(request: NextRequest) {
   try {
-    // Rate limiting
-    const clientIP = getClientIP(request);
-    const { allowed, remaining } = checkRateLimit(clientIP);
-    
-    if (!allowed) {
-      return NextResponse.json(
-        { 
-          error: "Rate limit exceeded. Sign up for unlimited extractions!",
-          signupUrl: "/login"
-        },
-        { status: 429 }
-      );
-    }
 
     const { fileData, mimeType } = await request.json();
 
@@ -121,7 +74,7 @@ Return ONLY valid JSON:
 IMPORTANT:
 - The metadata array must contain EVERY key piece of info found — be thorough
 - For currency in metadata, use the 3-letter ISO 4217 code (e.g., "EUR" not "€")
-- The "rows" array must contain ACTUAL extracted data (first 7-10 rows), not placeholders
+- The "rows" array must contain ALL extracted data rows from the ENTIRE document, not just a sample
 - For dashes in amount columns, use null
 - ALWAYS return valid JSON`;
 
@@ -135,7 +88,7 @@ IMPORTANT:
       }],
       generationConfig: {
         temperature: 0.1,
-        maxOutputTokens: 8192,
+        maxOutputTokens: 65536,
         responseMimeType: "application/json",
       },
     });
@@ -161,7 +114,6 @@ IMPORTANT:
         error: "This document doesn't contain extractable tabular data.",
         documentType: scanResult.documentType,
         metadata: scanResult.metadata || [],
-        remaining,
       });
     }
 
@@ -211,8 +163,6 @@ IMPORTANT:
       
       // Warnings
       warnings: scanResult.warnings || [],
-      
-      remaining,
     });
 
   } catch (error) {
@@ -229,9 +179,8 @@ IMPORTANT:
 
 // Health check endpoint
 export async function GET() {
-  return NextResponse.json({ 
-    status: "ok", 
-    service: "Smart Data Extractor Demo",
-    rateLimit: `${RATE_LIMIT_MAX} extractions per ${RATE_LIMIT_WINDOW / (60 * 60 * 1000)} hours`
+  return NextResponse.json({
+    status: "ok",
+    service: "Smart Data Extractor",
   });
 }

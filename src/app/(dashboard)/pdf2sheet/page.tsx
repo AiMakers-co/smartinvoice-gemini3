@@ -312,7 +312,7 @@ export default function Pdf2SheetPage() {
 
       {/* Conversion Detail Dialog */}
       <Dialog open={!!selectedConversion} onOpenChange={() => setSelectedConversion(null)}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
+        <DialogContent className="max-w-[90vw] max-h-[90vh] w-full h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <div className="h-8 w-8 rounded-lg bg-emerald-100 flex items-center justify-center">

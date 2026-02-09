@@ -64,7 +64,7 @@ interface AuthContextType {
 
   // User actions
   updateUserSettings: (settings: Partial<UserSettings>) => Promise<void>;
-  updateUserProfile: (data: { name?: string; avatarUrl?: string }) => Promise<void>;
+  updateUserProfile: (data: { name?: string; avatarUrl?: string; companyName?: string; companyAliases?: string[] }) => Promise<void>;
 
   // Organization actions (admin only)
   updateOrgSettings: (settings: Partial<OrganizationSettings>) => Promise<void>;
@@ -463,7 +463,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  const updateUserProfile = async (data: { name?: string; avatarUrl?: string }) => {
+  const updateUserProfile = async (data: { name?: string; avatarUrl?: string; companyName?: string; companyAliases?: string[] }) => {
     if (!firebaseUser?.uid) throw new Error("Not authenticated");
     
     await updateDoc(doc(db, "users", firebaseUser.uid), data);

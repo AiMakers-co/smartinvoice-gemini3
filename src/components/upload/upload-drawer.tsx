@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { httpsCallable } from "firebase/functions";
-import { collection, addDoc, serverTimestamp, Timestamp, query, where, getDocs, updateDoc, doc } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, Timestamp, query, where, getDocs, updateDoc, doc, writeBatch } from "firebase/firestore";
 import { db, storage, functions } from "@/lib/firebase";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -421,7 +421,7 @@ function AIThinkingTerminal({
 // FILE QUEUE PANEL
 // ============================================
 
-function FileQueuePanel({ fileStates, currentIndex }: { fileStates: ContextFileUploadState[]; currentIndex?: number }) {
+function FileQueuePanel({ fileStates, currentIndex, phase }: { fileStates: ContextFileUploadState[]; currentIndex?: number; phase?: "identifying" | "extracting" }) {
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
   if (fileStates.length <= 1) return null;
@@ -479,7 +479,9 @@ function FileQueuePanel({ fileStates, currentIndex }: { fileStates: ContextFileU
     }
   });
 
-  const identifiedCount = fileStates.filter(f => f.status === "type_confirmed" || f.status === "extracted").length;
+  const identifiedCount = phase === "extracting"
+    ? fileStates.filter(f => f.status === "extracted").length
+    : fileStates.filter(f => f.status === "type_confirmed" || f.status === "extracting" || f.status === "extracted").length;
   const typeSummary = Object.entries(typeGroups)
     .filter(([k]) => k !== "__other__")
     .map(([t, files]) => `${files.length} ${t}${files.length !== 1 ? "s" : ""}`)
@@ -563,10 +565,7 @@ function FileQueuePanel({ fileStates, currentIndex }: { fileStates: ContextFileU
           </div>
         )}
 
-        {/* Spacer pushes collapsed groups to bottom */}
-        <div className="flex-1" />
-
-        {/* Collapsible type groups (pinned to bottom) */}
+        {/* Type groups */}
         {Object.entries(typeGroups)
           .filter(([k]) => k !== "__other__")
           .sort(([a], [b]) => {
@@ -574,7 +573,7 @@ function FileQueuePanel({ fileStates, currentIndex }: { fileStates: ContextFileU
             return (order[a] ?? 99) - (order[b] ?? 99);
           })
           .map(([typeKey, files]) => {
-            const isCollapsed = collapsedGroups[typeKey] ?? true;
+            const isCollapsed = collapsedGroups[typeKey] ?? false;
             const typeInfo = getTypeLabel(files[0]?.fs.identifyResult?.detectedType || files[0]?.fs.confirmedType);
             const avgConf = files.length > 0
               ? Math.round(files.reduce((s, f) => s + f.confidence, 0) / files.length * 100)
@@ -636,6 +635,7 @@ export function UploadDrawer({
   const startTimeRef = useRef(0);
   // Accumulates company names discovered from bank statements during batch identification
   const discoveredCompanyNamesRef = useRef<Set<string>>(new Set());
+  const extractionRunningRef = useRef(false);
   
   // Use persistent state from context
   const { 
@@ -652,6 +652,8 @@ export function UploadDrawer({
   } = useUploadState();
   
   const fileStates = uploadState.fileStates;
+  const fileStatesRef = useRef(fileStates);
+  fileStatesRef.current = fileStates;
   const currentStep = uploadState.step;
   const selectedType = uploadState.selectedType || defaultType;
   const savedCount = uploadState.savedCount;
@@ -1019,6 +1021,8 @@ export function UploadDrawer({
   // PHASE 2: Extract Full Data (after type confirmation)
   const extractFile = useCallback(async (fileState: ContextFileUploadState, index: number) => {
     if (!user?.id || !fileState.confirmedType) return;
+    // Guard: skip if already extracting or done
+    if (fileState.status === "extracting" || fileState.status === "extracted") return;
     
     const updateFileState = (updates: Partial<ContextFileUploadState>) => {
       setFileStates(prev => prev.map((f, i) => i === index ? { ...f, ...updates } : f));
@@ -1177,8 +1181,8 @@ export function UploadDrawer({
     }));
     setFileStates(initialStates);
     
-    // Process files with limited parallelism (2 at a time)
-    const CONCURRENCY = 2;
+    // Process files with limited parallelism (5 at a time)
+    const CONCURRENCY = 5;
     for (let i = 0; i < sortedFiles.length; i += CONCURRENCY) {
       const batch = [];
       for (let j = i; j < Math.min(i + CONCURRENCY, sortedFiles.length); j++) {
@@ -1265,22 +1269,51 @@ export function UploadDrawer({
     setCurrentStep("confirm_type");
   }, [user?.id, identifyFile, setFileStates, setCurrentStep]);
 
-  // Extract all confirmed files - PHASE 2
+  // Extract all confirmed files - PHASE 2 (parallel batches)
   const extractAllFiles = useCallback(async () => {
+    // Guard: prevent double-execution (e.g. React StrictMode, accidental double-click)
+    if (extractionRunningRef.current) {
+      console.warn("[extractAllFiles] Already running — skipping duplicate call");
+      return;
+    }
+    extractionRunningRef.current = true;
+
     setThinkingLines([]);
     setElapsedMs(0);
     startTimeRef.current = Date.now();
     setCurrentStep("extracting");
 
-    // Process all confirmed files
-    const confirmedFiles = fileStates.filter(f => f.status === "type_confirmed");
-    for (let i = 0; i < confirmedFiles.length; i++) {
-      const originalIndex = fileStates.indexOf(confirmedFiles[i]);
-      await extractFile(confirmedFiles[i], originalIndex);
+    // Snapshot file states from ref (always latest) — avoids stale closures
+    const currentFiles = fileStatesRef.current;
+    const confirmed = currentFiles.filter(f => f.status === "type_confirmed");
+
+    if (confirmed.length === 0) {
+      extractionRunningRef.current = false;
+      setCurrentStep("preview");
+      return;
     }
-    
+
+    const toProcess = confirmed.map(f => ({
+      fileState: f,
+      originalIndex: currentFiles.indexOf(f),
+    }));
+
+    console.log(`[extractAllFiles] Processing ${toProcess.length} files (indices: ${toProcess.map(t => t.originalIndex).join(",")})`);
+
+    try {
+      const EXTRACT_CONCURRENCY = 4;
+      for (let i = 0; i < toProcess.length; i += EXTRACT_CONCURRENCY) {
+        const batch = toProcess.slice(i, i + EXTRACT_CONCURRENCY);
+        await Promise.allSettled(
+          batch.map(({ fileState, originalIndex }) => extractFile(fileState, originalIndex))
+        );
+      }
+    } finally {
+      extractionRunningRef.current = false;
+    }
+
     setCurrentStep("preview");
-  }, [fileStates, extractFile]);
+  }, [extractFile, setCurrentStep]);
 
   // Handle file selection - with hard stop if at limit
   const handleFilesSelect = useCallback((selectedFiles: FileList | File[]) => {
@@ -1445,110 +1478,102 @@ export function UploadDrawer({
         
       }
 
-      // Save each statement (with deduplication)
+      // Save documents with deduplication — parallel dedup checks, batched writes
       let savedCount = 0;
       let skippedCount = 0;
-      
-      // Helper to normalize bank names (same as grouping logic)
+
       const normalizeBankName = (name: string): string => {
-        return name
-          .toLowerCase()
-          .replace(/\./g, '') // Remove periods (N.V. -> NV)
-          .replace(/\s+/g, ' ') // Normalize whitespace
-          .trim();
+        return name.toLowerCase().replace(/\./g, '').replace(/\s+/g, ' ').trim();
       };
-      
-      for (let i = 0; i < validScannedFiles.length; i++) {
-        const fileState = validScannedFiles[i];
+
+      // PHASE A: Run all dedup checks in parallel (fast)
+      setSavingProgress(5);
+      const DEDUP_BATCH = 10;
+      const dedupResults: boolean[] = new Array(validScannedFiles.length).fill(false); // true = duplicate
+
+      for (let i = 0; i < validScannedFiles.length; i += DEDUP_BATCH) {
+        const batch = validScannedFiles.slice(i, i + DEDUP_BATCH);
+        const checks = batch.map(async (fileState, batchIdx) => {
+          const idx = i + batchIdx;
+          const extracted = fileState.extractedData!;
+          const fileType = fileState.confirmedType || selectedType;
+
+          if (fileType === "statement" && extracted.periodStart && extracted.periodEnd) {
+            const dupeQuery = query(
+              collection(db, "statements"),
+              where("userId", "==", user.id),
+              where("accountNumber", "==", extracted.accountNumber),
+              where("periodStart", "==", Timestamp.fromDate(new Date(extracted.periodStart))),
+              where("periodEnd", "==", Timestamp.fromDate(new Date(extracted.periodEnd)))
+            );
+            const existing = await getDocs(dupeQuery);
+            if (!existing.empty) dedupResults[idx] = true;
+          } else if (fileType === "bill" && extracted.documentNumber && extracted.documentNumber !== "Unknown") {
+            const dupeQuery = query(
+              collection(db, "bills"),
+              where("userId", "==", user.id),
+              where("documentNumber", "==", extracted.documentNumber),
+              where("vendorName", "==", extracted.vendorName || "Unknown"),
+              where("total", "==", extracted.total || 0)
+            );
+            const existing = await getDocs(dupeQuery);
+            if (!existing.empty) dedupResults[idx] = true;
+          } else if (fileType === "invoice" && extracted.documentNumber && extracted.documentNumber !== "Unknown") {
+            const dupeQuery = query(
+              collection(db, "invoices"),
+              where("userId", "==", user.id),
+              where("documentNumber", "==", extracted.documentNumber),
+              where("customerName", "==", extracted.customerName || "Unknown"),
+              where("total", "==", extracted.total || 0)
+            );
+            const existing = await getDocs(dupeQuery);
+            if (!existing.empty) dedupResults[idx] = true;
+          }
+        });
+        await Promise.allSettled(checks);
+        setSavingProgress(5 + ((i + batch.length) / validScannedFiles.length) * 30);
+      }
+
+      skippedCount = dedupResults.filter(Boolean).length;
+
+      // PHASE B: Save non-duplicate files in batches using writeBatch (max 500 per batch)
+      const toSave = validScannedFiles.filter((_, idx) => !dedupResults[idx]);
+      const csvFiles: Array<{ fileState: typeof validScannedFiles[0]; fileType: string }> = [];
+
+      // Separate CSV files (need individual Cloud Function calls) from standard saves
+      const standardFiles: Array<{ fileState: typeof validScannedFiles[0]; fileType: string; fileConfig: typeof config }> = [];
+
+      for (const fileState of toSave) {
         const extracted = fileState.extractedData!;
-        
-        // USE EACH FILE'S OWN TYPE — not the global selectedType
-        // This is critical for mixed uploads (invoices + statements in one batch)
         const fileType = fileState.confirmedType || selectedType;
         const fileConfig = TYPE_CONFIG[fileType] || config;
-        
-        // Determine which account this file belongs to (use normalized bank name)
-        const normalizedBankName = normalizeBankName(extracted.bankName || "Unknown Bank");
-        const fileKey = `${normalizedBankName}|${extracted.accountNumber || "Unknown"}`;
-        const accountId = accountIdMap[fileKey] || null;
-        
-        setSavingProgress(((i + 0.5) / validScannedFiles.length) * 100);
-
-        // Deduplication check for statements
-        if (fileType === "statement" && extracted.periodStart && extracted.periodEnd) {
-          const dupeQuery = query(
-            collection(db, "statements"),
-            where("userId", "==", user.id),
-            where("accountNumber", "==", extracted.accountNumber),
-            where("periodStart", "==", Timestamp.fromDate(new Date(extracted.periodStart))),
-            where("periodEnd", "==", Timestamp.fromDate(new Date(extracted.periodEnd)))
-          );
-          const existingStatements = await getDocs(dupeQuery);
-          
-          if (!existingStatements.empty) {
-            skippedCount++;
-            continue;
-          }
-        }
-        
-        // Deduplication check for bills
-        if (fileType === "bill" && extracted.documentNumber && extracted.documentNumber !== "Unknown") {
-          const dupeQuery = query(
-            collection(db, "bills"),
-            where("userId", "==", user.id),
-            where("documentNumber", "==", extracted.documentNumber),
-            where("vendorName", "==", extracted.vendorName || "Unknown"),
-            where("total", "==", extracted.total || 0)
-          );
-          const existingBills = await getDocs(dupeQuery);
-          
-          if (!existingBills.empty) {
-            skippedCount++;
-            continue;
-          }
-        }
-        
-        // Deduplication check for invoices
-        if (fileType === "invoice" && extracted.documentNumber && extracted.documentNumber !== "Unknown") {
-          const dupeQuery = query(
-            collection(db, "invoices"),
-            where("userId", "==", user.id),
-            where("documentNumber", "==", extracted.documentNumber),
-            where("customerName", "==", extracted.customerName || "Unknown"),
-            where("total", "==", extracted.total || 0)
-          );
-          const existingInvoices = await getDocs(dupeQuery);
-          
-          if (!existingInvoices.empty) {
-            skippedCount++;
-            continue;
-          }
-        }
-
-        setSavingProgress(((i + 1) / validScannedFiles.length) * 100);
-
-        // For CSV/Excel files with parsing rules, use extractInvoices function
         const isCSVFile = extracted.isCSV && extracted.csvParsingRules && (fileType === "invoice" || fileType === "bill");
-        
+
         if (isCSVFile && fileState.fileUrl) {
-          const extractFn = httpsCallable(functions, "extractInvoices", { timeout: 300000 });
-          const mimeType = getMimeType(fileState.file);
-          
-          try {
-            const extractResult = await extractFn({
-              fileUrl: fileState.fileUrl,
-              mimeType,
-              parsingRules: extracted.csvParsingRules,
-            });
-            
-            const result = extractResult.data as { invoiceCount: number; summary?: { totalAmount?: number } };
-            savedCount += result.invoiceCount;
-          } catch (extractErr) {
-            console.error("Extract invoices error:", extractErr);
-            throw extractErr;
-          }
+          csvFiles.push({ fileState, fileType });
         } else {
-          // Standard single document save (PDF, image, etc.)
+          standardFiles.push({ fileState, fileType, fileConfig });
+        }
+      }
+
+      // Save standard files in writeBatch groups of 400 (leave headroom under 500 limit)
+      const WRITE_BATCH_SIZE = 400;
+      for (let i = 0; i < standardFiles.length; i += WRITE_BATCH_SIZE) {
+        const chunk = standardFiles.slice(i, i + WRITE_BATCH_SIZE);
+        const batch = writeBatch(db);
+
+        for (const { fileState, fileType } of chunk) {
+          const extracted = fileState.extractedData!;
+          const normalizedBankName = normalizeBankName(extracted.bankName || "Unknown Bank");
+          const fileKey = `${normalizedBankName}|${extracted.accountNumber || "Unknown"}`;
+          const accountId = accountIdMap[fileKey] || null;
+
+          const targetCollection = fileType === "statement" ? "statements"
+            : fileType === "invoice" ? "invoices"
+            : fileType === "bill" ? "bills"
+            : "documents";
+
+          const docRef = doc(collection(db, targetCollection));
           const docData: any = {
             userId: user.id,
             originalFileName: fileState.file.name,
@@ -1603,15 +1628,30 @@ export function UploadDrawer({
             docData.paymentStatus = "unpaid";
           }
 
-          // Save to the CORRECT collection based on this file's type
-          const targetCollection = fileType === "statement" ? "statements" 
-            : fileType === "invoice" ? "invoices" 
-            : fileType === "bill" ? "bills" 
-            : fileConfig.collection;
-          
-          await addDoc(collection(db, targetCollection), docData);
-          savedCount++;
+          batch.set(docRef, docData);
         }
+
+        await batch.commit();
+        savedCount += chunk.length;
+        setSavingProgress(35 + ((i + chunk.length) / Math.max(toSave.length, 1)) * 55);
+      }
+
+      // Handle CSV files sequentially (each requires a Cloud Function call)
+      for (let i = 0; i < csvFiles.length; i++) {
+        const { fileState } = csvFiles[i];
+        const extracted = fileState.extractedData!;
+        const extractFn = httpsCallable(functions, "extractInvoices", { timeout: 300000 });
+        const mimeType = getMimeType(fileState.file);
+
+        const extractResult = await extractFn({
+          fileUrl: fileState.fileUrl,
+          mimeType,
+          parsingRules: extracted.csvParsingRules,
+        });
+
+        const result = extractResult.data as { invoiceCount: number; summary?: { totalAmount?: number } };
+        savedCount += result.invoiceCount;
+        setSavingProgress(90 + ((i + 1) / csvFiles.length) * 10);
       }
       
       // Store counts for completion message
@@ -2082,10 +2122,15 @@ export function UploadDrawer({
                             const canFlipDirection = type === "invoice" || type === "bill";
                             const flipTarget = type === "invoice" ? "bill" : "invoice";
                             const flipLabel = type === "invoice" ? "Wrong direction — these are incoming bills (A/P)" : "Wrong direction — these are outgoing invoices (A/R)";
-                            // Get from/to from first file
-                            const firstFile = files[0];
-                            const invoiceFrom = firstFile?.identifyResult?.invoiceFrom;
-                            const invoiceTo = firstFile?.identifyResult?.invoiceTo;
+                            // Collect unique from/to across ALL files in this group
+                            const uniqueFroms = new Set<string>();
+                            const uniqueTos = new Set<string>();
+                            files.forEach(f => {
+                              if (f.identifyResult?.invoiceFrom) uniqueFroms.add(f.identifyResult.invoiceFrom);
+                              if (f.identifyResult?.invoiceTo) uniqueTos.add(f.identifyResult.invoiceTo);
+                            });
+                            const invoiceFrom = uniqueFroms.size === 1 ? [...uniqueFroms][0] : (uniqueFroms.size > 1 ? `${uniqueFroms.size} different senders` : null);
+                            const invoiceTo = uniqueTos.size === 1 ? [...uniqueTos][0] : (uniqueTos.size > 1 ? `${uniqueTos.size} different recipients` : null);
                             
                             return (
                               <div key={type} className="p-2.5 bg-slate-50 rounded-xl">
@@ -2220,9 +2265,10 @@ export function UploadDrawer({
               </div>
               {/* File Queue — fixed 1/3, same height as terminal */}
               <div className="w-1/3 shrink-0 min-w-0 h-full">
-                <FileQueuePanel 
-                  fileStates={fileStates} 
+                <FileQueuePanel
+                  fileStates={fileStates}
                   currentIndex={fileStates.findIndex(f => f.status === "extracting")}
+                  phase="extracting"
                 />
               </div>
             </div>
@@ -2236,12 +2282,16 @@ export function UploadDrawer({
               </div>
               <h3 className="text-base font-semibold text-slate-900 mb-1">Saving documents</h3>
               <p className="text-sm text-slate-500 mb-4">
-                Saving {validScannedFiles.length} {validScannedFiles.length === 1 ? "document" : "documents"} to your account...
+                {savingProgress <= 35
+                  ? `Checking ${validScannedFiles.length} documents for duplicates...`
+                  : `Writing ${validScannedFiles.length} documents to your account...`}
               </p>
               {savingProgress > 0 && (
                 <div className="w-full max-w-xs">
                   <Progress value={savingProgress} className="h-2" />
-                  <p className="text-xs text-slate-400 mt-2">{Math.round(savingProgress)}% complete</p>
+                  <p className="text-xs text-slate-400 mt-2">
+                    {savingProgress <= 35 ? "Dedup check" : "Saving"} — {Math.round(savingProgress)}%
+                  </p>
                 </div>
               )}
             </div>

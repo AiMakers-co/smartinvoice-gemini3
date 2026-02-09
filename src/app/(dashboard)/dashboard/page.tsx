@@ -8,6 +8,7 @@ import {
   Upload,
   TrendingUp,
   AlertCircle,
+  AlertTriangle,
   ChevronRight,
   FileText,
   CheckCircle2,
@@ -19,11 +20,16 @@ import {
   Sparkles,
   FileSpreadsheet,
   ArrowRight,
+  ArrowUpRight,
+  ArrowDownRight,
   Eye,
   Terminal,
   ShieldCheck,
   AlertOctagon,
   Repeat,
+  DollarSign,
+  Calendar,
+  Copy,
 } from "lucide-react";
 import { UsageWarning } from "@/components/ui/usage-warning";
 import { CashFlowForecast } from "@/components/financial-chat";
@@ -115,6 +121,7 @@ export default function DashboardPage() {
     totalStatements: 0,
     totalBanks: 0,
   });
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Load accounts
@@ -182,6 +189,7 @@ export default function DashboardPage() {
     const q = query(collection(db, "transactions"), where("userId", "==", user.id), orderBy("date", "desc"));
     const unsub = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })) as Transaction[];
+      setTransactions(data);
       setStats((prev) => ({ ...prev, totalTransactions: data.length }));
 
       // Compute reconciliation stats from transactions
@@ -271,6 +279,124 @@ export default function DashboardPage() {
     }
     return reconStats;
   }, [reconStats, reconRuns]);
+
+  // Anomaly detection
+  const anomalies = useMemo(() => {
+    const results: { type: string; severity: "high" | "medium" | "low"; description: string; icon: React.ReactNode }[] = [];
+
+    // Large transaction outliers (>2 std dev from mean)
+    const debitAmounts = transactions.filter((t: any) => t.type === "debit").map((t: any) => t.amount);
+    if (debitAmounts.length > 5) {
+      const mean = debitAmounts.reduce((a: number, b: number) => a + b, 0) / debitAmounts.length;
+      const variance = debitAmounts.reduce((a: number, b: number) => a + (b - mean) ** 2, 0) / debitAmounts.length;
+      const stdDev = Math.sqrt(variance);
+      const threshold = mean + 2 * stdDev;
+      const outliers = transactions.filter((t: any) => t.type === "debit" && t.amount > threshold);
+      if (outliers.length > 0) {
+        results.push({
+          type: "large_transaction",
+          severity: "medium",
+          description: `${outliers.length} unusually large payment${outliers.length > 1 ? "s" : ""} (>${formatCurrency(threshold)})`,
+          icon: <DollarSign className="h-3.5 w-3.5" />,
+        });
+      }
+    }
+
+    // Slow payers from vendor patterns (>30 day delay)
+    const slowPayers = vendorPatterns.filter((p: any) => p.typicalDelay && p.typicalDelay.max > 30);
+    if (slowPayers.length > 0) {
+      results.push({
+        type: "slow_payer",
+        severity: "low",
+        description: `${slowPayers.length} vendor${slowPayers.length > 1 ? "s" : ""} with 30+ day payment delays`,
+        icon: <Clock className="h-3.5 w-3.5" />,
+      });
+    }
+
+    // Low reconciliation match rate (>20% unmatched)
+    const unmatchedRate = effectiveReconStats.total > 0
+      ? ((effectiveReconStats.total - effectiveReconStats.matched) / effectiveReconStats.total) * 100
+      : 0;
+    if (unmatchedRate > 20) {
+      results.push({
+        type: "low_match_rate",
+        severity: "high",
+        description: `${Math.round(unmatchedRate)}% of transactions are unreconciled`,
+        icon: <AlertCircle className="h-3.5 w-3.5" />,
+      });
+    }
+
+    // FX cross-currency transactions
+    const fxMatches = reconMatches.filter((m: any) => m.matchType === "fx_conversion" || m.transactionCurrency !== m.documentCurrency);
+    if (fxMatches.length > 0) {
+      results.push({
+        type: "fx_exposure",
+        severity: "low",
+        description: `${fxMatches.length} cross-currency transaction${fxMatches.length > 1 ? "s" : ""}`,
+        icon: <ArrowRight className="h-3.5 w-3.5" />,
+      });
+    }
+
+    // Duplicate payments — same amount + similar description within 30 days
+    const debits = transactions.filter((t: any) => t.type === "debit" && t.amount > 0);
+    const duplicates = new Set<string>();
+    for (let i = 0; i < debits.length; i++) {
+      for (let j = i + 1; j < debits.length; j++) {
+        const a = debits[i] as any;
+        const b = debits[j] as any;
+        if (Math.abs(a.amount - b.amount) < 0.01) {
+          const dateA = a.date instanceof Timestamp ? a.date.toDate() : new Date(a.date);
+          const dateB = b.date instanceof Timestamp ? b.date.toDate() : new Date(b.date);
+          const daysDiff = Math.abs(dateA.getTime() - dateB.getTime()) / (1000 * 60 * 60 * 24);
+          if (daysDiff <= 30 && daysDiff > 0) {
+            const descA = (a.description || "").toLowerCase().replace(/[^a-z]/g, "");
+            const descB = (b.description || "").toLowerCase().replace(/[^a-z]/g, "");
+            if (descA && descB && (descA.includes(descB.slice(0, 8)) || descB.includes(descA.slice(0, 8)))) {
+              duplicates.add(`${a.id}-${b.id}`);
+            }
+          }
+        }
+      }
+    }
+    if (duplicates.size > 0) {
+      results.push({
+        type: "duplicate_payment",
+        severity: "high",
+        description: `${duplicates.size} potential duplicate payment${duplicates.size > 1 ? "s" : ""} detected`,
+        icon: <Copy className="h-3.5 w-3.5" />,
+      });
+    }
+
+    // Unusual weekend payments (>$5k on Sat/Sun)
+    const weekendPayments = transactions.filter((t: any) => {
+      if (t.type !== "debit" || t.amount < 5000) return false;
+      const date = t.date instanceof Timestamp ? t.date.toDate() : new Date(t.date);
+      const day = date.getDay();
+      return day === 0 || day === 6;
+    });
+    if (weekendPayments.length > 0) {
+      results.push({
+        type: "weekend_payment",
+        severity: "medium",
+        description: `${weekendPayments.length} large weekend payment${weekendPayments.length > 1 ? "s" : ""} (>$5K)`,
+        icon: <Calendar className="h-3.5 w-3.5" />,
+      });
+    }
+
+    // Sort by severity
+    const severityOrder = { high: 0, medium: 1, low: 2 };
+    return results.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
+  }, [transactions, vendorPatterns, effectiveReconStats, reconMatches]);
+
+  // Cash flow trend (current vs prior month)
+  const cashFlowTrend = useMemo(() => {
+    if (monthlyData.length < 2) return null;
+    const current = monthlyData[monthlyData.length - 1];
+    const prior = monthlyData[monthlyData.length - 2];
+    if (!prior || prior.net === 0) return null;
+    const change = ((current.net - prior.net) / Math.abs(prior.net)) * 100;
+    return { change, direction: change >= 0 ? "up" as const : "down" as const };
+  }, [monthlyData]);
 
   const getStatusIcon = (status: Statement["status"]) => {
     switch (status) {
@@ -468,6 +594,14 @@ export default function DashboardPage() {
                   <div className="flex items-center gap-2">
                     <h3 className="text-sm font-semibold text-slate-900">Cash Flow</h3>
                     <span className="text-[10px] text-slate-400 font-medium">Last 6 months</span>
+                    {cashFlowTrend && (
+                      <span className={`flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                        cashFlowTrend.direction === "up" ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-600"
+                      }`}>
+                        {cashFlowTrend.direction === "up" ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                        {Math.abs(cashFlowTrend.change).toFixed(0)}% vs prior
+                      </span>
+                    )}
                   </div>
                   <Button variant="ghost" size="sm" className="h-7 text-xs" asChild>
                     <Link href="/transactions">View all <ChevronRight className="h-3 w-3 ml-1" /></Link>
@@ -482,7 +616,7 @@ export default function DashboardPage() {
                     </div>
                   ) : (
                     <div className="h-[200px]">
-                      <ResponsiveContainer width="100%" height="100%">
+                      <ResponsiveContainer width="100%" height={200} minWidth={0}>
                         <AreaChart data={monthlyData}>
                           <defs>
                             <linearGradient id="creditGrad" x1="0" y1="0" x2="0" y2="1">
@@ -509,6 +643,9 @@ export default function DashboardPage() {
                   )}
                 </div>
               </div>
+
+              {/* AI Cash Flow Forecast */}
+              <CashFlowForecast />
 
               {/* Bank Accounts */}
               <div className="border border-slate-200 rounded-xl overflow-hidden">
@@ -552,12 +689,47 @@ export default function DashboardPage() {
                   </div>
                 )}
               </div>
-              {/* AI Cash Flow Forecast */}
-              <CashFlowForecast />
             </div>
 
             {/* Right column */}
             <div className="col-span-4 space-y-5">
+              {/* Anomaly Alerts */}
+              {anomalies.length > 0 && (
+                <div className="border border-red-200 bg-red-50/40 rounded-xl overflow-hidden">
+                  <div className="px-4 py-3 border-b border-red-200/50 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-red-500" />
+                      <h3 className="text-sm font-semibold text-slate-900">Fraud Detection</h3>
+                      <span className="text-[10px] font-semibold text-red-600 bg-red-100 px-1.5 py-0.5 rounded-full">
+                        {anomalies.length} alert{anomalies.length !== 1 ? "s" : ""}
+                      </span>
+                    </div>
+                    <Button variant="ghost" size="sm" className="h-7 text-xs text-red-600 hover:text-red-700" asChild>
+                      <Link href="/insights">Details <ChevronRight className="h-3 w-3 ml-1" /></Link>
+                    </Button>
+                  </div>
+                  <div className="px-4 py-2.5 space-y-2">
+                    {anomalies.slice(0, 5).map((anomaly, i) => (
+                      <div key={i} className="flex items-start gap-2.5 text-xs">
+                        <div className={`mt-0.5 shrink-0 ${
+                          anomaly.severity === "high" ? "text-red-500" :
+                          anomaly.severity === "medium" ? "text-amber-500" : "text-slate-400"
+                        }`}>
+                          {anomaly.icon}
+                        </div>
+                        <span className="text-slate-700 flex-1 leading-relaxed">{anomaly.description}</span>
+                        <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                          anomaly.severity === "high" ? "bg-red-100 text-red-700" :
+                          anomaly.severity === "medium" ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-600"
+                        }`}>
+                          {anomaly.severity}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Reconciliation Overview */}
               <div className="border border-slate-200 rounded-xl overflow-hidden">
                 <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">

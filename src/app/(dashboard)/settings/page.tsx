@@ -434,6 +434,9 @@ function DataManagementTab({ userId }: { userId?: string }) {
     lineItems: 0,
     templates: 0,
     bills: 0,
+    reconRuns: 0,
+    reconMatches: 0,
+    vendorPatterns: 0,
   });
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
@@ -454,6 +457,9 @@ function DataManagementTab({ userId }: { userId?: string }) {
           { name: "invoice_line_items", key: "lineItems" },
           { name: "invoice_templates", key: "templates" },
           { name: "bills", key: "bills" },
+          { name: "reconciliation_runs", key: "reconRuns" },
+          { name: "reconciliation_matches", key: "reconMatches" },
+          { name: "vendor_patterns", key: "vendorPatterns" },
         ];
 
         const counts: Record<string, number> = {};
@@ -488,6 +494,15 @@ function DataManagementTab({ userId }: { userId?: string }) {
         "invoice_templates",
         "accounts",
         "bills",
+        "reconciliation_runs",
+        "reconciliation_matches",
+        "vendor_patterns",
+        "match_history",
+        "reconciliation_investigations",
+        "pdf2sheet_jobs",
+        "pdf2sheet_templates",
+        "import_templates",
+        "payments",
       ];
 
       for (const colName of collections) {
@@ -524,6 +539,9 @@ function DataManagementTab({ userId }: { userId?: string }) {
         lineItems: 0,
         templates: 0,
         bills: 0,
+        reconRuns: 0,
+        reconMatches: 0,
+        vendorPatterns: 0,
       });
 
       setTimeout(() => setDeleteSuccess(false), 5000);
@@ -579,6 +597,18 @@ function DataManagementTab({ userId }: { userId?: string }) {
                 <p className="text-xs text-slate-500">Bills</p>
                 <p className="text-lg font-semibold text-slate-900">{dataCounts.bills}</p>
               </div>
+              <div className="p-3 bg-slate-50 rounded-lg">
+                <p className="text-xs text-slate-500">Reconciliation Runs</p>
+                <p className="text-lg font-semibold text-slate-900">{dataCounts.reconRuns}</p>
+              </div>
+              <div className="p-3 bg-slate-50 rounded-lg">
+                <p className="text-xs text-slate-500">Matches</p>
+                <p className="text-lg font-semibold text-slate-900">{dataCounts.reconMatches}</p>
+              </div>
+              <div className="p-3 bg-slate-50 rounded-lg">
+                <p className="text-xs text-slate-500">Vendor Patterns</p>
+                <p className="text-lg font-semibold text-slate-900">{dataCounts.vendorPatterns}</p>
+              </div>
             </div>
           )}
         </CardContent>
@@ -619,6 +649,9 @@ function DataManagementTab({ userId }: { userId?: string }) {
                       <li>• {dataCounts.lineItems} line items</li>
                       <li>• {dataCounts.templates} templates</li>
                       <li>• {dataCounts.bills} bills</li>
+                      <li>• {dataCounts.reconRuns} reconciliation runs</li>
+                      <li>• {dataCounts.reconMatches} matches</li>
+                      <li>• {dataCounts.vendorPatterns} vendor patterns</li>
                     </ul>
                     <p className="text-xs text-red-800 font-medium mt-3">
                       Total: {totalItems} items will be deleted
@@ -2587,6 +2620,8 @@ export default function SettingsPage() {
 
   const [settings, setSettings] = useState({
     name: user?.name || "",
+    companyName: user?.companyName || "",
+    companyAliases: user?.companyAliases?.join(", ") || "",
     defaultExportFormat: user?.settings?.defaultExportFormat || "csv",
     theme: user?.settings?.theme || "system",
     emailNotifications: user?.settings?.emailNotifications ?? true,
@@ -2597,6 +2632,8 @@ export default function SettingsPage() {
     if (user) {
       setSettings({
         name: user.name || "",
+        companyName: user.companyName || "",
+        companyAliases: user.companyAliases?.join(", ") || "",
         defaultExportFormat: user.settings?.defaultExportFormat || "csv",
         theme: user.settings?.theme || "system",
         emailNotifications: user.settings?.emailNotifications ?? true,
@@ -2633,8 +2670,23 @@ export default function SettingsPage() {
         processingAlerts: settings.processingAlerts,
       });
       
+      const profileUpdates: { name?: string; companyName?: string; companyAliases?: string[] } = {};
       if (settings.name !== user?.name) {
-        await updateUserProfile({ name: settings.name });
+        profileUpdates.name = settings.name;
+      }
+      if (settings.companyName !== (user?.companyName || "")) {
+        profileUpdates.companyName = settings.companyName;
+      }
+      const aliases = settings.companyAliases
+        .split(",")
+        .map((a: string) => a.trim())
+        .filter(Boolean);
+      const currentAliases = user?.companyAliases || [];
+      if (JSON.stringify(aliases) !== JSON.stringify(currentAliases)) {
+        profileUpdates.companyAliases = aliases;
+      }
+      if (Object.keys(profileUpdates).length > 0) {
+        await updateUserProfile(profileUpdates);
       }
       
       setSuccess(true);
@@ -2728,6 +2780,40 @@ export default function SettingsPage() {
                       className="h-8 text-xs bg-slate-50" 
                     />
                     <p className="text-[10px] text-slate-400">Contact support to change your email</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-sm">
+              <CardHeader className="py-3 px-4">
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <Building2 className="h-4 w-4 text-slate-500" />
+                  Company Information
+                </CardTitle>
+                <CardDescription className="text-xs">Your company details used for document processing and reconciliation</CardDescription>
+              </CardHeader>
+              <CardContent className="px-4 pb-4 pt-0 space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Company Name</Label>
+                    <Input
+                      value={settings.companyName}
+                      onChange={(e) => setSettings({ ...settings, companyName: e.target.value })}
+                      placeholder="e.g. Expert Systems BV"
+                      className="h-8 text-xs"
+                    />
+                    <p className="text-[10px] text-slate-400">Used by AI to identify your invoices vs supplier bills</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Trading Names / Aliases</Label>
+                    <Input
+                      value={settings.companyAliases}
+                      onChange={(e) => setSettings({ ...settings, companyAliases: e.target.value })}
+                      placeholder="e.g. Expert Systems, ESC BV"
+                      className="h-8 text-xs"
+                    />
+                    <p className="text-[10px] text-slate-400">Comma-separated alternative names found on bank statements or documents</p>
                   </div>
                 </div>
               </CardContent>

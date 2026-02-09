@@ -87,9 +87,14 @@ export function CashFlowForecast() {
         getDocs(query(collection(db, "reconciliation_runs"), where("userId", "==", user.id), orderBy("updatedAt", "desc"), limit(3))),
       ]);
 
+      const safeNum = (v: unknown): number => {
+        const n = Number(v);
+        return isFinite(n) ? n : 0;
+      };
+
       const accounts = accountsSnap.docs.map(d => {
         const data = d.data();
-        return { bankName: data.bankName || "Unknown", currency: data.currency || "USD", balance: data.balance || 0, transactionCount: data.transactionCount || 0 };
+        return { bankName: data.bankName || "Unknown", currency: data.currency || "USD", balance: safeNum(data.balance), transactionCount: safeNum(data.transactionCount) };
       });
 
       const transactions = txSnap.docs.map(d => {
@@ -101,7 +106,7 @@ export function CashFlowForecast() {
         } catch {
           dateStr = "unknown";
         }
-        return { date: dateStr, amount: Math.abs(data.amount || 0), type: (data.type || "debit") as string, currency: data.currency || "USD" };
+        return { date: dateStr, amount: safeNum(Math.abs(safeNum(data.amount))), type: (data.type || "debit") as string, currency: data.currency || "USD" };
       });
 
       // Monthly cash flow
@@ -122,9 +127,9 @@ export function CashFlowForecast() {
           const [year, month] = k.split("-").map(Number);
           return {
             month: new Date(year, month - 1).toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
-            credits: Math.round(d.credits),
-            debits: Math.round(d.debits),
-            net: Math.round(d.credits - d.debits),
+            credits: safeNum(Math.round(d.credits)),
+            debits: safeNum(Math.round(d.debits)),
+            net: safeNum(Math.round(d.credits - d.debits)),
           };
         });
 
@@ -139,7 +144,7 @@ export function CashFlowForecast() {
         } catch { /* keep unknown */ }
         return {
           customer: i.customerName || i.counterpartyName || "Unknown",
-          amountDue: i.amountRemaining ?? i.total ?? 0,
+          amountDue: safeNum(i.amountRemaining ?? i.total),
           currency: i.currency || "USD",
           dueDate,
         };
@@ -153,14 +158,14 @@ export function CashFlowForecast() {
         } catch { /* keep unknown */ }
         return {
           vendor: b.vendorName || b.counterpartyName || "Unknown",
-          amountDue: b.amountRemaining ?? b.total ?? 0,
+          amountDue: safeNum(b.amountRemaining ?? b.total),
           currency: b.currency || "USD",
           dueDate,
         };
       });
 
       const latestRun = runsSnap.docs[0]?.data();
-      const matchRate = latestRun?.totalTransactions > 0 ? Math.round((latestRun.totalMatched / latestRun.totalTransactions) * 100) : 0;
+      const matchRate = safeNum(latestRun?.totalTransactions) > 0 ? Math.round((safeNum(latestRun.totalMatched) / safeNum(latestRun.totalTransactions)) * 100) : 0;
 
       if (intervalRef.current) clearInterval(intervalRef.current);
       setThinkingLines(prev => [...prev, "Sending to Gemini 3 for analysis..."]);
