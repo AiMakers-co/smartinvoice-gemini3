@@ -285,13 +285,13 @@ export default function DashboardPage() {
     const results: { type: string; severity: "high" | "medium" | "low"; description: string; icon: React.ReactNode }[] = [];
 
     // Large transaction outliers (>2 std dev from mean)
-    const debitAmounts = transactions.filter((t: any) => t.type === "debit").map((t: any) => t.amount);
+    const debitAmounts = transactions.filter((t: any) => t.type === "debit").map((t: any) => Math.abs(t.amount));
     if (debitAmounts.length > 5) {
       const mean = debitAmounts.reduce((a: number, b: number) => a + b, 0) / debitAmounts.length;
       const variance = debitAmounts.reduce((a: number, b: number) => a + (b - mean) ** 2, 0) / debitAmounts.length;
       const stdDev = Math.sqrt(variance);
       const threshold = mean + 2 * stdDev;
-      const outliers = transactions.filter((t: any) => t.type === "debit" && t.amount > threshold);
+      const outliers = transactions.filter((t: any) => t.type === "debit" && Math.abs(t.amount) > threshold);
       if (outliers.length > 0) {
         results.push({
           type: "large_transaction",
@@ -338,13 +338,13 @@ export default function DashboardPage() {
     }
 
     // Duplicate payments — same amount + similar description within 30 days
-    const debits = transactions.filter((t: any) => t.type === "debit" && t.amount > 0);
+    const debits = transactions.filter((t: any) => t.type === "debit");
     const duplicates = new Set<string>();
     for (let i = 0; i < debits.length; i++) {
       for (let j = i + 1; j < debits.length; j++) {
         const a = debits[i] as any;
         const b = debits[j] as any;
-        if (Math.abs(a.amount - b.amount) < 0.01) {
+        if (Math.abs(Math.abs(a.amount) - Math.abs(b.amount)) < 0.01) {
           const dateA = a.date instanceof Timestamp ? a.date.toDate() : new Date(a.date);
           const dateB = b.date instanceof Timestamp ? b.date.toDate() : new Date(b.date);
           const daysDiff = Math.abs(dateA.getTime() - dateB.getTime()) / (1000 * 60 * 60 * 24);
@@ -369,7 +369,7 @@ export default function DashboardPage() {
 
     // Unusual weekend payments (>$5k on Sat/Sun)
     const weekendPayments = transactions.filter((t: any) => {
-      if (t.type !== "debit" || t.amount < 5000) return false;
+      if (t.type !== "debit" || Math.abs(t.amount) < 5000) return false;
       const date = t.date instanceof Timestamp ? t.date.toDate() : new Date(t.date);
       const day = date.getDay();
       return day === 0 || day === 6;
@@ -458,7 +458,7 @@ export default function DashboardPage() {
           {/* Greeting row */}
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-xl font-semibold text-slate-900">{getGreeting()}, {userName}</h1>
+              <h1 className="text-xl font-semibold font-mono tracking-wide text-slate-900">{getGreeting()}, {userName}</h1>
               <p className="text-sm text-slate-500 mt-0.5">
                 {(user as any)?.companyName && (
                   <span className="font-medium text-slate-700">{(user as any).companyName}</span>
@@ -471,32 +471,32 @@ export default function DashboardPage() {
             </div>
             <div className="flex items-center gap-2 border border-slate-200 rounded-lg px-3 py-2">
               <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-xs font-medium text-slate-600">Gemini 3</span>
+              <span className="text-xs font-medium font-mono text-slate-600">Gemini 3</span>
             </div>
           </div>
 
           {/* Stat cards */}
           <div className="grid grid-cols-6 gap-3">
             {currencyBalances.slice(0, 2).map((cb) => (
-              <div key={cb.currency} className="border border-slate-200 rounded-xl px-4 py-3.5">
-                <p className="text-xs text-slate-500 font-medium">{cb.currency} Balance</p>
+              <div key={cb.currency} className="bg-white border border-slate-200 rounded-lg shadow-sm px-4 py-3.5">
+                <p className="text-xs text-slate-500 font-mono font-medium tracking-wide uppercase">{cb.currency} Balance</p>
                 <p className="text-lg font-semibold text-slate-900 mt-1">{formatCurrency(cb.balance, cb.currency)}</p>
                 <p className="text-xs text-slate-400 mt-0.5">{cb.accountCount} account{cb.accountCount !== 1 ? "s" : ""}</p>
               </div>
             ))}
             {currencyBalances.length === 0 && (
-              <div className="border border-slate-200 rounded-xl px-4 py-3.5 col-span-2">
-                <p className="text-xs text-slate-500 font-medium">Total Balance</p>
+              <div className="bg-white border border-slate-200 rounded-lg shadow-sm px-4 py-3.5 col-span-2">
+                <p className="text-xs text-slate-500 font-mono font-medium tracking-wide uppercase">Total Balance</p>
                 <p className="text-lg font-semibold text-slate-400 mt-1">--</p>
               </div>
             )}
-            <div className="border border-slate-200 rounded-xl px-4 py-3.5">
-              <p className="text-xs text-slate-500 font-medium">Transactions</p>
+            <div className="bg-white border border-slate-200 rounded-lg shadow-sm px-4 py-3.5">
+              <p className="text-xs text-slate-500 font-mono font-medium tracking-wide uppercase">Transactions</p>
               <p className="text-lg font-semibold text-slate-900 mt-1">{formatCompactNumber(stats.totalTransactions)}</p>
               <p className="text-xs text-slate-400 mt-0.5">AI extracted</p>
             </div>
-            <div className="border border-slate-200 rounded-xl px-4 py-3.5">
-              <p className="text-xs text-slate-500 font-medium">Match Rate</p>
+            <div className="bg-white border border-slate-200 rounded-lg shadow-sm px-4 py-3.5">
+              <p className="text-xs text-slate-500 font-mono font-medium tracking-wide uppercase">Match Rate</p>
               <p className={`text-lg font-semibold mt-1 ${effectiveReconStats.total > 0 && effectiveReconStats.matched / effectiveReconStats.total >= 0.8 ? "text-emerald-600" : "text-slate-900"}`}>
                 {effectiveReconStats.total > 0 ? `${Math.round((effectiveReconStats.matched / effectiveReconStats.total) * 100)}%` : "--"}
               </p>
@@ -504,13 +504,13 @@ export default function DashboardPage() {
                 {effectiveReconStats.total > 0 ? `${effectiveReconStats.matched} of ${effectiveReconStats.total}` : "no data yet"}
               </p>
             </div>
-            <div className="border border-slate-200 rounded-xl px-4 py-3.5">
-              <p className="text-xs text-slate-500 font-medium">Patterns Learned</p>
+            <div className="bg-white border border-slate-200 rounded-lg shadow-sm px-4 py-3.5">
+              <p className="text-xs text-slate-500 font-mono font-medium tracking-wide uppercase">Patterns Learned</p>
               <p className="text-lg font-semibold text-slate-900 mt-1">{vendorPatterns.length}</p>
               <p className="text-xs text-slate-400 mt-0.5">vendor behaviors</p>
             </div>
-            <div className="border border-purple-200 rounded-xl px-4 py-3.5 bg-purple-50/30">
-              <p className="text-xs text-purple-600 font-medium flex items-center gap-1"><Brain className="h-3 w-3" /> AI Actions</p>
+            <div className="border border-purple-200 rounded-lg shadow-sm px-4 py-3.5 bg-purple-50/30">
+              <p className="text-xs text-purple-600 font-mono font-medium tracking-wide uppercase flex items-center gap-1"><Brain className="h-3 w-3" /> AI Actions</p>
               <p className="text-lg font-semibold text-purple-700 mt-1">
                 {recentStatements.filter(s => s.status === "completed").length + reconRuns.length + pdf2sheetJobs.length}
               </p>
@@ -520,17 +520,17 @@ export default function DashboardPage() {
 
           {/* AI Tools */}
           <div>
-            <h2 className="text-sm font-semibold text-slate-900 mb-3">AI-Powered Tools</h2>
+            <h2 className="text-sm font-semibold font-mono tracking-wide uppercase text-slate-900 mb-3">AI-Powered Tools</h2>
             <div className="grid grid-cols-3 gap-4">
               <Link
                 href="/reconciliation"
-                className="group border border-slate-200 rounded-xl p-4 hover:border-purple-400 transition-colors"
+                className="group bg-white border border-slate-200 rounded-lg shadow-sm p-4 hover:border-purple-400 transition-colors"
               >
                 <div className="flex items-center gap-3 mb-2.5">
                   <div className="h-8 w-8 rounded-lg bg-purple-50 flex items-center justify-center">
                     <Brain className="h-4 w-4 text-purple-600" />
                   </div>
-                  <h3 className="font-medium text-slate-900 text-sm">AI Reconciliation</h3>
+                  <h3 className="font-medium font-mono tracking-wide text-slate-900 text-sm">AI Reconciliation</h3>
                 </div>
                 <p className="text-xs text-slate-500 leading-relaxed">
                   3-tier matching engine with real-time reasoning. Watch the AI think as it matches transactions.
@@ -544,13 +544,13 @@ export default function DashboardPage() {
 
               <Link
                 href="/pdf2sheet"
-                className="group border border-slate-200 rounded-xl p-4 hover:border-emerald-400 transition-colors"
+                className="group bg-white border border-slate-200 rounded-lg shadow-sm p-4 hover:border-emerald-400 transition-colors"
               >
                 <div className="flex items-center gap-3 mb-2.5">
                   <div className="h-8 w-8 rounded-lg bg-emerald-50 flex items-center justify-center">
                     <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
                   </div>
-                  <h3 className="font-medium text-slate-900 text-sm">Smart Extract</h3>
+                  <h3 className="font-medium font-mono tracking-wide text-slate-900 text-sm">Smart Extract</h3>
                 </div>
                 <p className="text-xs text-slate-500 leading-relaxed">
                   Vision-powered document extraction. Any PDF table to structured Excel/CSV in seconds.
@@ -564,13 +564,13 @@ export default function DashboardPage() {
 
               <Link
                 href="/accounts"
-                className="group border border-slate-200 rounded-xl p-4 hover:border-cyan-400 transition-colors"
+                className="group bg-white border border-slate-200 rounded-lg shadow-sm p-4 hover:border-cyan-400 transition-colors"
               >
                 <div className="flex items-center gap-3 mb-2.5">
                   <div className="h-8 w-8 rounded-lg bg-cyan-50 flex items-center justify-center">
                     <Upload className="h-4 w-4 text-cyan-600" />
                   </div>
-                  <h3 className="font-medium text-slate-900 text-sm">Smart Import</h3>
+                  <h3 className="font-medium font-mono tracking-wide text-slate-900 text-sm">Smart Import</h3>
                 </div>
                 <p className="text-xs text-slate-500 leading-relaxed">
                   Upload bank statements and invoices. AI auto-detects format and extracts every transaction.
@@ -589,10 +589,10 @@ export default function DashboardPage() {
             {/* Left — Chart + Accounts */}
             <div className="col-span-8 space-y-5">
               {/* Cash Flow Chart */}
-              <div className="border border-slate-200 rounded-xl overflow-hidden">
-                <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
+              <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-3 bg-slate-50 border-b border-slate-100">
                   <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-semibold text-slate-900">Cash Flow</h3>
+                    <h3 className="text-sm font-semibold font-mono tracking-wide uppercase text-slate-900">Cash Flow</h3>
                     <span className="text-[10px] text-slate-400 font-medium">Last 6 months</span>
                     {cashFlowTrend && (
                       <span className={`flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
@@ -648,10 +648,10 @@ export default function DashboardPage() {
               <CashFlowForecast />
 
               {/* Bank Accounts */}
-              <div className="border border-slate-200 rounded-xl overflow-hidden">
-                <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
+              <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-3 bg-slate-50 border-b border-slate-100">
                   <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-semibold text-slate-900">Bank Accounts</h3>
+                    <h3 className="text-sm font-semibold font-mono tracking-wide uppercase text-slate-900">Bank Accounts</h3>
                     {accounts.length > 0 && <span className="text-xs text-slate-400">{accounts.length}</span>}
                   </div>
                   <Button variant="ghost" size="sm" className="h-7 text-xs" asChild>
@@ -695,11 +695,11 @@ export default function DashboardPage() {
             <div className="col-span-4 space-y-5">
               {/* Anomaly Alerts */}
               {anomalies.length > 0 && (
-                <div className="border border-red-200 bg-red-50/40 rounded-xl overflow-hidden">
-                  <div className="px-4 py-3 border-b border-red-200/50 flex items-center justify-between">
+                <div className="border border-red-200 bg-red-50/40 rounded-lg shadow-sm overflow-hidden">
+                  <div className="px-4 py-3 bg-red-50/60 border-b border-red-200/50 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <AlertTriangle className="h-4 w-4 text-red-500" />
-                      <h3 className="text-sm font-semibold text-slate-900">Fraud Detection</h3>
+                      <h3 className="text-sm font-semibold font-mono tracking-wide uppercase text-slate-900">Fraud Detection</h3>
                       <span className="text-[10px] font-semibold text-red-600 bg-red-100 px-1.5 py-0.5 rounded-full">
                         {anomalies.length} alert{anomalies.length !== 1 ? "s" : ""}
                       </span>
@@ -731,9 +731,9 @@ export default function DashboardPage() {
               )}
 
               {/* Reconciliation Overview */}
-              <div className="border border-slate-200 rounded-xl overflow-hidden">
-                <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-slate-900">Reconciliation</h3>
+              <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+                <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                  <h3 className="text-sm font-semibold font-mono tracking-wide uppercase text-slate-900">Reconciliation</h3>
                   <Button variant="ghost" size="sm" className="h-7 text-xs" asChild>
                     <Link href="/reconciliation">Open <ChevronRight className="h-3 w-3 ml-1" /></Link>
                   </Button>
@@ -786,10 +786,10 @@ export default function DashboardPage() {
 
               {/* Attention Items */}
               {(effectiveReconStats.unmatched > 0 || reconMatches.some((m: any) => m.status === "needs_review")) && (
-                <div className="border border-amber-200 bg-amber-50/50 rounded-xl overflow-hidden">
-                  <div className="px-4 py-3 border-b border-amber-200/50 flex items-center gap-2">
+                <div className="border border-amber-200 bg-amber-50/50 rounded-lg shadow-sm overflow-hidden">
+                  <div className="px-4 py-3 bg-amber-50/60 border-b border-amber-200/50 flex items-center gap-2">
                     <AlertOctagon className="h-4 w-4 text-amber-500" />
-                    <h3 className="text-sm font-semibold text-slate-900">Needs Attention</h3>
+                    <h3 className="text-sm font-semibold font-mono tracking-wide uppercase text-slate-900">Needs Attention</h3>
                   </div>
                   <div className="px-4 py-2.5 space-y-2">
                     {effectiveReconStats.unmatched > 0 && (
@@ -816,9 +816,9 @@ export default function DashboardPage() {
               )}
 
               {/* Vendor Patterns */}
-              <div className="border border-slate-200 rounded-xl overflow-hidden">
-                <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-slate-900">Learned Patterns</h3>
+              <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+                <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                  <h3 className="text-sm font-semibold font-mono tracking-wide uppercase text-slate-900">Learned Patterns</h3>
                   <span className="text-[10px] font-medium text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">AI</span>
                 </div>
                 {vendorPatterns.length === 0 ? (
@@ -853,9 +853,9 @@ export default function DashboardPage() {
               </div>
 
               {/* AI Activity Feed */}
-              <div className="border border-slate-200 rounded-xl overflow-hidden">
-                <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-slate-900">Recent Activity</h3>
+              <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+                <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                  <h3 className="text-sm font-semibold font-mono tracking-wide uppercase text-slate-900">Recent Activity</h3>
                   <span className="text-[10px] font-medium text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">Gemini 3</span>
                 </div>
                 {aiActivity.length === 0 ? (

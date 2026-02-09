@@ -149,7 +149,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       // Check if demo mode is active (localStorage set before sign-in)
       const isDemoMode = localStorage.getItem("smartinvoice_demo_mode") === "true";
-      const effectiveUserId = isDemoMode ? "demo_coastal_creative_agency" : userId;
+      const demoSessionId = localStorage.getItem("smartinvoice_demo_session_id");
+      const effectiveUserId = isDemoMode && demoSessionId
+        ? `demo_${demoSessionId}`
+        : isDemoMode ? "demo_coastal_creative_agency" : userId;
 
       // Get user document
       const userDocRef = doc(db, "users", effectiveUserId);
@@ -250,7 +253,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // In demo mode, subscribe to the demo user doc, not the anonymous UID
     const isDemoMode = localStorage.getItem("smartinvoice_demo_mode") === "true";
-    const effectiveUserId = isDemoMode ? "demo_coastal_creative_agency" : firebaseUser.uid;
+    const demoSessionId = localStorage.getItem("smartinvoice_demo_session_id");
+    const effectiveUserId = isDemoMode && demoSessionId
+      ? `demo_${demoSessionId}`
+      : isDemoMode ? "demo_coastal_creative_agency" : firebaseUser.uid;
 
     const unsubUser = onSnapshot(doc(db, "users", effectiveUserId), (doc) => {
       if (doc.exists()) {
@@ -431,6 +437,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       // Clear demo mode on sign out
       localStorage.removeItem("smartinvoice_demo_mode");
+      localStorage.removeItem("smartinvoice_demo_session_id");
       await firebaseSignOut(auth);
       setUser(null);
       setOrganization(null);

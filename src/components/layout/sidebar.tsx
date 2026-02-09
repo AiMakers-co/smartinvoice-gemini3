@@ -26,6 +26,7 @@ import {
   FileCheck,
   ChevronUp,
   Sparkles,
+  RotateCcw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -44,6 +45,8 @@ import { useDemoMode } from "@/hooks/use-demo-mode";
 import { useUploadState } from "@/hooks/use-upload-state";
 import { BrandLogo } from "@/components/brand";
 import { useState, useEffect, useCallback } from "react";
+import { db } from "@/lib/firebase";
+import { collection, query, where, getDocs, writeBatch } from "firebase/firestore";
 
 // Max number of sections open at once
 const MAX_OPEN = 3;
@@ -150,6 +153,80 @@ export function Sidebar() {
   }, []);
 
   const roleLabel = isOwner ? "Owner" : isAdmin ? "Admin" : isDeveloper ? "Dev" : "Member";
+  const [resetting, setResetting] = useState(false);
+
+  const resetDemoData = useCallback(async () => {
+    if (resetting || !user?.id) return;
+    setResetting(true);
+    try {
+      const demoId = user.id;
+      // Reset transactions to unmatched
+      const txSnap = await getDocs(query(collection(db, "transactions"), where("userId", "==", demoId)));
+      for (let i = 0; i < txSnap.docs.length; i += 500) {
+        const batch = writeBatch(db);
+        txSnap.docs.slice(i, i + 500).forEach(doc => {
+          batch.update(doc.ref, { reconciliationStatus: "unmatched", matchedDocumentId: null, confidence: null });
+        });
+        await batch.commit();
+      }
+
+      // Reset invoices to unpaid/unmatched
+      const invSnap = await getDocs(query(collection(db, "invoices"), where("userId", "==", demoId)));
+      for (let i = 0; i < invSnap.docs.length; i += 500) {
+        const batch = writeBatch(db);
+        invSnap.docs.slice(i, i + 500).forEach(doc => {
+          const data = doc.data();
+          batch.update(doc.ref, {
+            paymentStatus: "unpaid",
+            amountRemaining: data.total || data.amountRemaining || 0,
+            reconciliationStatus: "unmatched",
+            status: "outstanding",
+            paidDate: null,
+          });
+        });
+        await batch.commit();
+      }
+
+      // Reset bills to unpaid/unmatched
+      const billSnap = await getDocs(query(collection(db, "bills"), where("userId", "==", demoId)));
+      for (let i = 0; i < billSnap.docs.length; i += 500) {
+        const batch = writeBatch(db);
+        billSnap.docs.slice(i, i + 500).forEach(doc => {
+          const data = doc.data();
+          batch.update(doc.ref, {
+            paymentStatus: "unpaid",
+            amountRemaining: data.total || data.amountRemaining || 0,
+            reconciliationStatus: "unmatched",
+            status: "outstanding",
+            paidDate: null,
+          });
+        });
+        await batch.commit();
+      }
+
+      // Delete reconciliation matches
+      const matchSnap = await getDocs(query(collection(db, "reconciliation_matches"), where("userId", "==", demoId)));
+      for (let i = 0; i < matchSnap.docs.length; i += 500) {
+        const batch = writeBatch(db);
+        matchSnap.docs.slice(i, i + 500).forEach(doc => batch.delete(doc.ref));
+        await batch.commit();
+      }
+
+      // Delete reconciliation runs
+      const runSnap = await getDocs(query(collection(db, "reconciliation_runs"), where("userId", "==", demoId)));
+      for (let i = 0; i < runSnap.docs.length; i += 500) {
+        const batch = writeBatch(db);
+        runSnap.docs.slice(i, i + 500).forEach(doc => batch.delete(doc.ref));
+        await batch.commit();
+      }
+
+      // Reload to refresh all data
+      window.location.reload();
+    } catch (err) {
+      console.error("Failed to reset demo data:", err);
+      setResetting(false);
+    }
+  }, [resetting, user?.id]);
 
   const NavLink = ({ item, isActive }: { item: { name: string; href: string; icon: any }; isActive: boolean }) => (
     <Link
@@ -278,17 +355,35 @@ export function Sidebar() {
 
       </nav>
 
-      {/* Demo Mode Indicator — subtle label, no toggle */}
+      {/* Demo Mode Indicator + Reset */}
       {isDemoMode && (
         <div className="px-3 pb-2">
           {!collapsed ? (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
-              <Sparkles className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-              <p className="text-[11px] font-medium text-amber-300">Demo Mode</p>
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                <Sparkles className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                <p className="text-[11px] font-medium text-amber-300">Demo Mode</p>
+              </div>
+              <button
+                onClick={resetDemoData}
+                disabled={resetting}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 hover:bg-slate-700 hover:border-slate-600 transition-colors text-slate-300 hover:text-white disabled:opacity-50"
+              >
+                <RotateCcw className={cn("h-3.5 w-3.5", resetting && "animate-spin")} />
+                <span className="text-[11px] font-medium">{resetting ? "Resetting..." : "Reset Demo Data"}</span>
+              </button>
             </div>
           ) : (
-            <div className="flex justify-center">
+            <div className="flex flex-col items-center gap-1.5">
               <Sparkles className="h-4 w-4 text-amber-400" />
+              <button
+                onClick={resetDemoData}
+                disabled={resetting}
+                className="p-1.5 rounded-md hover:bg-slate-800 transition-colors text-slate-400 hover:text-white disabled:opacity-50"
+                title="Reset Demo Data"
+              >
+                <RotateCcw className={cn("h-3.5 w-3.5", resetting && "animate-spin")} />
+              </button>
             </div>
           )}
         </div>

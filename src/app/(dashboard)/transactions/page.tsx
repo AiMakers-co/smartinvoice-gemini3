@@ -219,27 +219,27 @@ function TransactionRow({ transaction, isExpanded, onToggle }: TransactionRowPro
 
       {/* Expanded Details */}
       {isExpanded && (
-        <tr className="bg-slate-50 border-b">
+        <tr className="bg-slate-50/50 border-b border-slate-100">
           <td colSpan={7} className="p-4">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div>
-                <p className="text-[10px] text-slate-500 uppercase mb-1">Full Description</p>
+                <p className="text-[10px] text-slate-500 uppercase tracking-wide font-mono mb-1">Full Description</p>
                 <p className="text-xs text-slate-900">{transaction.description}</p>
               </div>
               {transaction.reference && (
                 <div>
-                  <p className="text-[10px] text-slate-500 uppercase mb-1">Reference</p>
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wide font-mono mb-1">Reference</p>
                   <p className="text-xs text-slate-900 font-mono">{transaction.reference}</p>
                 </div>
               )}
               {transaction.merchant && (
                 <div>
-                  <p className="text-[10px] text-slate-500 uppercase mb-1">Merchant</p>
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wide font-mono mb-1">Merchant</p>
                   <p className="text-xs text-slate-900">{transaction.merchant}</p>
                 </div>
               )}
               <div>
-                <p className="text-[10px] text-slate-500 uppercase mb-1">Confidence</p>
+                <p className="text-[10px] text-slate-500 uppercase tracking-wide font-mono mb-1">Confidence</p>
                 <div className="flex items-center gap-1">
                   {(transaction.confidence || 1) >= 0.9 ? (
                     <CheckCircle2 className="h-3 w-3 text-green-500" />
@@ -250,19 +250,19 @@ function TransactionRow({ transaction, isExpanded, onToggle }: TransactionRowPro
                 </div>
               </div>
               <div>
-                <p className="text-[10px] text-slate-500 uppercase mb-1">Account</p>
+                <p className="text-[10px] text-slate-500 uppercase tracking-wide font-mono mb-1">Account</p>
                 <p className="text-xs text-slate-900">
                   {transaction.account?.bankName} • ****{transaction.account?.accountNumber?.slice(-4)}
                 </p>
               </div>
               <div>
-                <p className="text-[10px] text-slate-500 uppercase mb-1">Statement ID</p>
+                <p className="text-[10px] text-slate-500 uppercase tracking-wide font-mono mb-1">Statement ID</p>
                 <p className="text-xs text-slate-900 font-mono truncate">{transaction.statementId}</p>
               </div>
               {/* Matched Document Info */}
               {transaction.reconciliationStatus === "matched" && transaction.matchedDocumentNumber && (
                 <div>
-                  <p className="text-[10px] text-slate-500 uppercase mb-1">Matched Document</p>
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wide font-mono mb-1">Matched Document</p>
                   <div className="flex items-center gap-1.5">
                     <Link2 className="h-3 w-3 text-emerald-500" />
                     <p className="text-xs text-slate-900">
@@ -273,7 +273,7 @@ function TransactionRow({ transaction, isExpanded, onToggle }: TransactionRowPro
               )}
               {transaction.matchConfidence != null && (
                 <div>
-                  <p className="text-[10px] text-slate-500 uppercase mb-1">Match Confidence</p>
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wide font-mono mb-1">Match Confidence</p>
                   <div className="flex items-center gap-1">
                     {transaction.matchConfidence >= 0.85 ? (
                       <CheckCircle2 className="h-3 w-3 text-emerald-500" />
@@ -302,7 +302,7 @@ function TransactionsEmptyState({ onUpload }: { onUpload: () => void }) {
       {/* Header Row */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900">Transactions</h2>
+          <h2 className="text-lg font-semibold font-mono tracking-wide text-slate-900 uppercase">Transactions</h2>
           <p className="text-xs text-slate-500">View and manage all your bank transactions</p>
         </div>
         <Button onClick={onUpload} className="bg-cyan-600 hover:bg-cyan-700">
@@ -312,29 +312,29 @@ function TransactionsEmptyState({ onUpload }: { onUpload: () => void }) {
       </div>
 
       {/* Summary Bar */}
-      <div className="bg-white border rounded-lg">
-        <div className="flex items-center divide-x">
+      <div className="bg-white border border-slate-200 rounded-lg shadow-sm">
+        <div className="flex items-center divide-x divide-slate-100">
           <div className="px-3 py-2">
-            <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium">Total</div>
+            <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium font-mono">Total</div>
             <div className="text-base font-bold">0</div>
           </div>
           <div className="px-3 py-2">
-            <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium">Credits</div>
+            <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium font-mono">Credits</div>
             <div className="text-base font-bold text-emerald-600">$0.00</div>
           </div>
           <div className="px-3 py-2">
-            <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium">Debits</div>
+            <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium font-mono">Debits</div>
             <div className="text-base font-bold">$0.00</div>
           </div>
           <div className="px-3 py-2">
-            <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium">Net</div>
+            <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium font-mono">Net</div>
             <div className="text-base font-bold">$0.00</div>
           </div>
         </div>
       </div>
       
       {/* Empty Content */}
-      <Card>
+      <Card className="bg-white border border-slate-200 rounded-lg shadow-sm">
         <CardContent className="p-8 text-center">
           <div className="h-12 w-12 rounded-full bg-cyan-50 flex items-center justify-center mx-auto mb-3">
             <FileText className="h-6 w-6 text-cyan-600" />
@@ -814,7 +814,7 @@ export default function TransactionsPage() {
   // Show empty state when no transactions at all
   if (!loading && allTransactions.length === 0) {
     return (
-      <div className="flex flex-col h-full bg-slate-50">
+      <div className="flex flex-col h-full bg-white">
         <Header title="Transactions" />
         <div className="flex-1 p-4 overflow-hidden flex flex-col">
           <TransactionsEmptyState onUpload={() => openUploadDrawer("statement")} />
@@ -830,15 +830,15 @@ export default function TransactionsPage() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-slate-50">
+    <div className="flex flex-col h-full bg-white">
       <Header title="Transactions" />
 
       <div className="flex-1 p-4 overflow-hidden flex flex-col">
         {/* Compact Summary Bar */}
-        <div className="bg-white border rounded-lg mb-4">
-          <div className="flex items-center divide-x">
+        <div className="bg-white border border-slate-200 rounded-lg shadow-sm mb-4">
+          <div className="flex items-center divide-x divide-slate-100">
             <div className="flex-1 px-3 py-2">
-              <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium">Transactions</div>
+              <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium font-mono">Transactions</div>
               <div className="text-base font-bold">
                 {debouncedSearchQuery.trim() 
                   ? searchTotalHits.toLocaleString()
@@ -850,7 +850,7 @@ export default function TransactionsPage() {
               )}
             </div>
             <div className="flex-1 px-3 py-2">
-              <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium">Credits</div>
+              <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium font-mono">Credits</div>
               {summaryStats.hasMultipleCurrencies ? (
                 <div className="text-xs space-y-0.5">
                   {Object.entries(summaryStats.byCurrency).slice(0, 2).map(([currency, totals]) => (
@@ -862,7 +862,7 @@ export default function TransactionsPage() {
               )}
             </div>
             <div className="flex-1 px-3 py-2">
-              <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium">Debits</div>
+              <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium font-mono">Debits</div>
               {summaryStats.hasMultipleCurrencies ? (
                 <div className="text-xs space-y-0.5">
                   {Object.entries(summaryStats.byCurrency).slice(0, 2).map(([currency, totals]) => (
@@ -874,7 +874,7 @@ export default function TransactionsPage() {
               )}
             </div>
             <div className="flex-1 px-3 py-2">
-              <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium">Net</div>
+              <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium font-mono">Net</div>
               {summaryStats.hasMultipleCurrencies ? (
                 <div className="text-xs space-y-0.5">
                   {Object.entries(summaryStats.byCurrency).slice(0, 2).map(([currency, totals]) => {
@@ -893,11 +893,11 @@ export default function TransactionsPage() {
               )}
             </div>
             <div className="flex-1 px-3 py-2">
-              <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium">Matched</div>
+              <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium font-mono">Matched</div>
               <div className="text-base font-bold text-emerald-600">{summaryStats.matchedCount.toLocaleString()}</div>
             </div>
             <div className="flex-1 px-3 py-2">
-              <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium">Unmatched</div>
+              <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium font-mono">Unmatched</div>
               <div className="text-base font-bold text-slate-400">{summaryStats.unmatchedCount.toLocaleString()}</div>
             </div>
           </div>
@@ -1010,7 +1010,7 @@ export default function TransactionsPage() {
             </div>
 
         {/* Transactions Table */}
-        <Card className="flex-1 overflow-hidden">
+        <Card className="flex-1 overflow-hidden bg-white border border-slate-200 rounded-lg shadow-sm">
           <div className="h-full overflow-auto">
                 {loading ? (
               <div className="p-8 text-center">
@@ -1027,18 +1027,18 @@ export default function TransactionsPage() {
               </div>
             ) : (
               <table className="w-full table-fixed">
-                <thead className="bg-slate-50 sticky top-0 border-b">
+                <thead className="bg-slate-50 sticky top-0 border-b border-slate-100">
                   <tr>
-                    <th className="py-3 px-4 text-left text-[10px] font-medium text-slate-500 uppercase tracking-wider" style={{ width: "110px" }}>Date</th>
-                    <th className="py-3 px-4 text-left text-[10px] font-medium text-slate-500 uppercase tracking-wider" style={{ width: "160px" }}>Account</th>
-                    <th className="py-3 px-4 text-left text-[10px] font-medium text-slate-500 uppercase tracking-wider">Description</th>
-                    <th className="py-3 px-4 text-left text-[10px] font-medium text-slate-500 uppercase tracking-wider" style={{ width: "110px" }}>Status</th>
-                    <th className="py-3 px-4 text-right text-[10px] font-medium text-slate-500 uppercase tracking-wider" style={{ width: "140px" }}>Amount</th>
-                    <th className="py-3 px-4 text-right text-[10px] font-medium text-slate-500 uppercase tracking-wider" style={{ width: "150px" }}>Balance</th>
+                    <th className="py-3 px-4 text-left text-[10px] font-medium font-mono text-slate-500 uppercase tracking-wider" style={{ width: "110px" }}>Date</th>
+                    <th className="py-3 px-4 text-left text-[10px] font-medium font-mono text-slate-500 uppercase tracking-wider" style={{ width: "160px" }}>Account</th>
+                    <th className="py-3 px-4 text-left text-[10px] font-medium font-mono text-slate-500 uppercase tracking-wider">Description</th>
+                    <th className="py-3 px-4 text-left text-[10px] font-medium font-mono text-slate-500 uppercase tracking-wider" style={{ width: "110px" }}>Status</th>
+                    <th className="py-3 px-4 text-right text-[10px] font-medium font-mono text-slate-500 uppercase tracking-wider" style={{ width: "140px" }}>Amount</th>
+                    <th className="py-3 px-4 text-right text-[10px] font-medium font-mono text-slate-500 uppercase tracking-wider" style={{ width: "150px" }}>Balance</th>
                     <th className="py-3 px-4" style={{ width: "50px" }}></th>
                   </tr>
                 </thead>
-                <tbody className="divide-y">
+                <tbody className="divide-y divide-slate-100">
                   {filteredTransactions.map(tx => (
                     <TransactionRow
                       key={tx.id}

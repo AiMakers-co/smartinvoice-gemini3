@@ -289,11 +289,11 @@ function SecurityTab({
 
   return (
     <div className="space-y-4">
-      <Card className="shadow-sm">
-        <CardHeader className="py-3 px-4">
+      <Card className="bg-white border border-slate-200 rounded-lg shadow-sm">
+        <CardHeader className="py-3 px-4 bg-slate-50 border-b border-slate-100">
           <div className="flex items-center gap-2">
             <KeyRound className="h-4 w-4 text-slate-500" />
-            <CardTitle className="text-sm font-semibold">Sign-in Methods</CardTitle>
+            <CardTitle className="text-sm font-mono font-semibold uppercase tracking-wide">Sign-in Methods</CardTitle>
           </div>
           <CardDescription className="text-xs">Manage how you sign in to your account</CardDescription>
         </CardHeader>
@@ -394,7 +394,7 @@ function SecurityTab({
         </CardContent>
       </Card>
 
-      <Card className="shadow-sm bg-amber-50/50 border-amber-100">
+      <Card className="bg-amber-50/50 border border-amber-100 rounded-lg shadow-sm">
         <CardContent className="p-4">
           <div className="flex gap-3">
             <div className="h-9 w-9 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
@@ -557,9 +557,9 @@ function DataManagementTab({ userId }: { userId?: string }) {
 
   return (
     <div className="space-y-4">
-      <Card className="shadow-sm">
-        <CardHeader className="py-3 px-4">
-          <CardTitle className="text-sm font-semibold">Data Overview</CardTitle>
+      <Card className="bg-white border border-slate-200 rounded-lg shadow-sm">
+        <CardHeader className="py-3 px-4 bg-slate-50 border-b border-slate-100">
+          <CardTitle className="text-sm font-mono font-semibold uppercase tracking-wide">Data Overview</CardTitle>
           <CardDescription className="text-xs">Your stored data across all collections</CardDescription>
         </CardHeader>
         <CardContent className="px-4 pb-4 pt-0">
@@ -614,11 +614,11 @@ function DataManagementTab({ userId }: { userId?: string }) {
         </CardContent>
       </Card>
 
-      <Card className="shadow-sm border-red-200">
-        <CardHeader className="py-3 px-4 bg-red-50 rounded-t-lg">
+      <Card className="bg-white border border-red-200 rounded-lg shadow-sm">
+        <CardHeader className="py-3 px-4 bg-red-50 border-b border-red-100 rounded-t-lg">
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-red-600" />
-            <CardTitle className="text-sm font-semibold text-red-900">Danger Zone</CardTitle>
+            <CardTitle className="text-sm font-mono font-semibold uppercase tracking-wide text-red-900">Danger Zone</CardTitle>
           </div>
           <CardDescription className="text-xs text-red-700">
             Irreversible actions. Proceed with caution.
@@ -741,15 +741,15 @@ function TeamTab({ user, brand }: { user: any; brand: any }) {
   if (!hasTeamFeatures) {
     return (
       <div className="space-y-4">
-        <Card className="shadow-sm">
+        <Card className="bg-white border border-slate-200 rounded-lg shadow-sm">
           <CardHeader className="text-center pb-2">
-            <div 
+            <div
               className="w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center"
               style={{ backgroundColor: `${brand.colors.primary}15` }}
             >
               <Users className="w-8 h-8" style={{ color: brand.colors.primary }} />
             </div>
-            <CardTitle className="text-lg">Team Collaboration</CardTitle>
+            <CardTitle className="text-lg font-mono uppercase tracking-wide">Team Collaboration</CardTitle>
             <CardDescription className="text-sm">
               Invite team members to collaborate on document processing
             </CardDescription>
@@ -798,7 +798,7 @@ function TeamTab({ user, brand }: { user: any; brand: any }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-slate-900">Team Management</h3>
+          <h3 className="text-sm font-mono font-semibold uppercase tracking-wide text-slate-900">Team Management</h3>
           <p className="text-xs text-slate-500">
             {teamLimit >= 999 ? "Unlimited" : `Up to ${teamLimit}`} team members on your plan
           </p>
@@ -812,7 +812,7 @@ function TeamTab({ user, brand }: { user: any; brand: any }) {
       </div>
 
       {/* Current User (Owner) */}
-      <Card className="shadow-sm">
+      <Card className="bg-white border border-slate-200 rounded-lg shadow-sm">
         <CardContent className="p-3">
           <div className="flex items-center gap-3">
             <Avatar className="h-8 w-8">
@@ -836,9 +836,9 @@ function TeamTab({ user, brand }: { user: any; brand: any }) {
       </Card>
 
       {/* Team Features Coming Soon */}
-      <Card className="shadow-sm border-dashed">
-        <CardHeader className="py-4 px-4">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+      <Card className="bg-white border border-dashed border-slate-200 rounded-lg shadow-sm">
+        <CardHeader className="py-4 px-4 bg-slate-50 border-b border-slate-100">
+          <CardTitle className="text-sm font-mono font-semibold uppercase tracking-wide flex items-center gap-2">
             <Users className="h-4 w-4 text-slate-400" />
             Team Members
           </CardTitle>
@@ -861,7 +861,7 @@ function TeamTab({ user, brand }: { user: any; brand: any }) {
       </Card>
 
       {/* Plan Info */}
-      <Card className="shadow-sm">
+      <Card className="bg-white border border-slate-200 rounded-lg shadow-sm">
         <CardContent className="p-4">
           <div className="flex items-center justify-between">
             <div>
@@ -1369,7 +1369,7 @@ function UsageHistory({ userId }: UsageHistoryProps) {
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
-        <h4 className="text-sm font-semibold text-slate-900">Usage History</h4>
+        <h4 className="text-sm font-mono font-semibold uppercase tracking-wide text-slate-900">Usage History</h4>
         <span className="text-xs text-slate-500">Last 6 months</span>
       </div>
       
@@ -1831,7 +1831,7 @@ function BillingTab({ user, firebaseUser, brand, checkoutSuccess, checkoutCancel
       )}
 
       {/* Current Plan Hero - More Prominent */}
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
         <div className="p-6">
           <div className="flex items-start justify-between">
             <div className="flex items-start gap-4">
@@ -2013,11 +2013,11 @@ function BillingTab({ user, firebaseUser, brand, checkoutSuccess, checkoutCancel
 
       {/* Payment & Billing Details Card */}
       {!isFree && (
-        <Card className="shadow-sm">
-          <CardHeader className="py-4 px-6 border-b">
+        <Card className="bg-white border border-slate-200 rounded-lg shadow-sm">
+          <CardHeader className="py-4 px-6 bg-slate-50 border-b border-slate-100">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-base font-semibold">Payment & Billing</CardTitle>
+                <CardTitle className="text-base font-mono font-semibold uppercase tracking-wide">Payment & Billing</CardTitle>
                 <CardDescription className="text-sm">Manage your payment method and billing details</CardDescription>
               </div>
               <Button
@@ -2271,12 +2271,12 @@ function BillingTab({ user, firebaseUser, brand, checkoutSuccess, checkoutCancel
 
       {/* Usage History Toggle & Chart */}
       {firebaseUser?.uid && (
-        <Card className="shadow-sm">
-          <CardHeader className="py-3 px-4 border-b cursor-pointer hover:bg-slate-50" onClick={() => setShowUsageHistory(!showUsageHistory)}>
+        <Card className="bg-white border border-slate-200 rounded-lg shadow-sm">
+          <CardHeader className="py-3 px-4 bg-slate-50 border-b border-slate-100 cursor-pointer hover:bg-slate-100" onClick={() => setShowUsageHistory(!showUsageHistory)}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-slate-500" />
-                <CardTitle className="text-sm font-semibold">Usage History</CardTitle>
+                <CardTitle className="text-sm font-mono font-semibold uppercase tracking-wide">Usage History</CardTitle>
               </div>
               <ChevronRight className={cn(
                 "w-4 h-4 text-slate-400 transition-transform",
@@ -2333,11 +2333,11 @@ function BillingTab({ user, firebaseUser, brand, checkoutSuccess, checkoutCancel
 
       {/* Plans Section - Collapsible for paid users */}
       {(showPlans || isFree) && (
-        <Card className="shadow-sm">
-          <CardHeader className="py-4 px-6 border-b">
+        <Card className="bg-white border border-slate-200 rounded-lg shadow-sm">
+          <CardHeader className="py-4 px-6 bg-slate-50 border-b border-slate-100">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-base font-semibold">
+                <CardTitle className="text-base font-mono font-semibold uppercase tracking-wide">
                   {isFree ? "Choose Your Plan" : "Available Plans"}
                 </CardTitle>
                 <CardDescription className="text-sm">
@@ -2519,9 +2519,9 @@ function BillingTab({ user, firebaseUser, brand, checkoutSuccess, checkoutCancel
       )}
 
       {/* Recent Invoices */}
-      <Card className="shadow-sm">
-        <CardHeader className="py-3 px-4 border-b">
-          <CardTitle className="text-sm font-semibold">Recent Invoices</CardTitle>
+      <Card className="bg-white border border-slate-200 rounded-lg shadow-sm">
+        <CardHeader className="py-3 px-4 bg-slate-50 border-b border-slate-100">
+          <CardTitle className="text-sm font-mono font-semibold uppercase tracking-wide">Recent Invoices</CardTitle>
         </CardHeader>
         
         {invoices.length > 0 ? (
@@ -2700,7 +2700,7 @@ export default function SettingsPage() {
 
   if (authLoading) {
     return (
-      <div className="flex flex-col h-full bg-slate-50">
+      <div className="flex flex-col h-full bg-white">
         <Header title="Settings" />
         <div className="flex items-center justify-center flex-1">
           <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
@@ -2710,13 +2710,13 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-slate-50">
+    <div className="flex flex-col h-full bg-white">
       <Header title="Settings" />
 
       <div className="flex-1 p-4 space-y-4 overflow-auto">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-base font-semibold text-slate-900">Settings</h2>
+            <h2 className="text-base font-mono font-semibold uppercase tracking-wide text-slate-900">Settings</h2>
             <p className="text-xs text-slate-500">Manage your account, team, and subscription</p>
           </div>
           {(activeTab === "account" || activeTab === "notifications") && (
@@ -2757,9 +2757,9 @@ export default function SettingsPage() {
 
           {/* Account Tab */}
           <TabsContent value="account" className="space-y-4">
-            <Card className="shadow-sm">
-              <CardHeader className="py-3 px-4">
-                <CardTitle className="text-sm font-semibold">Profile Information</CardTitle>
+            <Card className="bg-white border border-slate-200 rounded-lg shadow-sm">
+              <CardHeader className="py-3 px-4 bg-slate-50 border-b border-slate-100">
+                <CardTitle className="text-sm font-mono font-semibold uppercase tracking-wide">Profile Information</CardTitle>
                 <CardDescription className="text-xs">Update your personal details</CardDescription>
               </CardHeader>
               <CardContent className="px-4 pb-4 pt-0 space-y-4">
@@ -2785,9 +2785,9 @@ export default function SettingsPage() {
               </CardContent>
             </Card>
 
-            <Card className="shadow-sm">
-              <CardHeader className="py-3 px-4">
-                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <Card className="bg-white border border-slate-200 rounded-lg shadow-sm">
+              <CardHeader className="py-3 px-4 bg-slate-50 border-b border-slate-100">
+                <CardTitle className="text-sm font-mono font-semibold uppercase tracking-wide flex items-center gap-2">
                   <Building2 className="h-4 w-4 text-slate-500" />
                   Company Information
                 </CardTitle>
@@ -2820,9 +2820,9 @@ export default function SettingsPage() {
             </Card>
 
             {organization && (
-              <Card className="shadow-sm">
-                <CardHeader className="py-3 px-4">
-                  <CardTitle className="text-sm font-semibold">Organization</CardTitle>
+              <Card className="bg-white border border-slate-200 rounded-lg shadow-sm">
+                <CardHeader className="py-3 px-4 bg-slate-50 border-b border-slate-100">
+                  <CardTitle className="text-sm font-mono font-semibold uppercase tracking-wide">Organization</CardTitle>
                   <CardDescription className="text-xs">Your team and organization details</CardDescription>
                 </CardHeader>
                 <CardContent className="px-4 pb-4 pt-0">
@@ -2841,9 +2841,9 @@ export default function SettingsPage() {
               </Card>
             )}
 
-            <Card className="shadow-sm">
-              <CardHeader className="py-3 px-4">
-                <CardTitle className="text-sm font-semibold">Preferences</CardTitle>
+            <Card className="bg-white border border-slate-200 rounded-lg shadow-sm">
+              <CardHeader className="py-3 px-4 bg-slate-50 border-b border-slate-100">
+                <CardTitle className="text-sm font-mono font-semibold uppercase tracking-wide">Preferences</CardTitle>
                 <CardDescription className="text-xs">Customize your experience</CardDescription>
               </CardHeader>
               <CardContent className="px-4 pb-4 pt-0 space-y-4">
@@ -2928,9 +2928,9 @@ export default function SettingsPage() {
 
           {/* Notifications Tab */}
           <TabsContent value="notifications" className="space-y-4">
-            <Card className="shadow-sm">
-              <CardHeader className="py-3 px-4">
-                <CardTitle className="text-sm font-semibold">Email Notifications</CardTitle>
+            <Card className="bg-white border border-slate-200 rounded-lg shadow-sm">
+              <CardHeader className="py-3 px-4 bg-slate-50 border-b border-slate-100">
+                <CardTitle className="text-sm font-mono font-semibold uppercase tracking-wide">Email Notifications</CardTitle>
                 <CardDescription className="text-xs">Manage what emails you receive</CardDescription>
               </CardHeader>
               <CardContent className="px-4 pb-4 pt-0 space-y-3">

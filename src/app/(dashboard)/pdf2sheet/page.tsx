@@ -107,32 +107,32 @@ export default function Pdf2SheetPage() {
   const totalPages = recentConversions.filter(c => c.status === "completed").reduce((sum, c) => sum + (c.pageCount || 0), 0);
 
   return (
-    <div className="flex flex-col h-full bg-slate-50">
+    <div className="flex flex-col h-full bg-white">
       <Header title="Smart Extract" />
 
       <div className="flex-1 p-4 flex flex-col min-h-0">
         {/* Stats Bar */}
         <div className="grid grid-cols-5 gap-3 mb-4 shrink-0">
-          <div className="bg-white border rounded-lg px-3 py-2.5">
-            <div className="text-[9px] uppercase tracking-wider text-slate-500 font-medium">Conversions</div>
+          <div className="bg-white border border-slate-200 rounded-lg shadow-sm px-3 py-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-slate-500 font-mono font-medium">Conversions</div>
             <div className="text-lg font-bold text-slate-900">{completedCount}</div>
           </div>
-          <div className="bg-white border rounded-lg px-3 py-2.5">
-            <div className="text-[9px] uppercase tracking-wider text-slate-500 font-medium">Pages</div>
+          <div className="bg-white border border-slate-200 rounded-lg shadow-sm px-3 py-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-slate-500 font-mono font-medium">Pages</div>
             <div className="text-lg font-bold text-cyan-600">{totalPages}</div>
           </div>
-          <div className="bg-white border rounded-lg px-3 py-2.5">
-            <div className="text-[9px] uppercase tracking-wider text-slate-500 font-medium">Rows Extracted</div>
+          <div className="bg-white border border-slate-200 rounded-lg shadow-sm px-3 py-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-slate-500 font-mono font-medium">Rows Extracted</div>
             <div className="text-lg font-bold text-emerald-600">{totalRows.toLocaleString()}</div>
           </div>
-          <div className="bg-white border rounded-lg px-3 py-2.5">
-            <div className="text-[9px] uppercase tracking-wider text-slate-500 font-medium">Templates</div>
+          <div className="bg-white border border-slate-200 rounded-lg shadow-sm px-3 py-2.5">
+            <div className="text-[9px] uppercase tracking-wide text-slate-500 font-mono font-medium">Templates</div>
             <div className="text-lg font-bold text-purple-600">{savedTemplates.length}</div>
           </div>
-          <div className="bg-white border rounded-lg px-3 py-2.5 flex items-center gap-2">
+          <div className="bg-white border border-slate-200 rounded-lg shadow-sm px-3 py-2.5 flex items-center gap-2">
             <Brain className="h-4 w-4 text-purple-500" />
             <div>
-              <div className="text-[9px] uppercase tracking-wider text-slate-500 font-medium">Engine</div>
+              <div className="text-[9px] uppercase tracking-wide text-slate-500 font-mono font-medium">Engine</div>
               <div className="text-xs font-semibold text-purple-600">Gemini 3 Flash</div>
             </div>
           </div>
@@ -141,7 +141,7 @@ export default function Pdf2SheetPage() {
         {/* Main Content */}
         <div className="grid grid-cols-3 gap-4 flex-1 min-h-0">
           {/* Left — Main Tool */}
-          <div className="col-span-2 bg-white border rounded-xl flex flex-col min-h-0 overflow-hidden">
+          <div className="col-span-2 bg-white border border-slate-200 rounded-lg shadow-sm flex flex-col min-h-0 overflow-hidden">
             <div className="flex-1 overflow-y-auto p-5">
               <Pdf2SheetTool mode="full" />
             </div>
@@ -150,11 +150,11 @@ export default function Pdf2SheetPage() {
           {/* Right — Templates & History */}
           <div className="flex flex-col gap-4 min-h-0">
             {/* Templates */}
-            <div className="bg-white border rounded-xl flex flex-col" style={{ height: "40%" }}>
-              <div className="flex items-center justify-between px-4 py-2.5 border-b shrink-0">
+            <div className="bg-white border border-slate-200 rounded-lg shadow-sm flex flex-col" style={{ height: "40%" }}>
+              <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-100 shrink-0">
                 <div className="flex items-center gap-2">
                   <Layers className="h-4 w-4 text-purple-500" />
-                  <span className="text-xs font-semibold text-slate-700">Templates</span>
+                  <span className="text-xs font-mono font-semibold uppercase tracking-wide text-slate-700">Templates</span>
                 </div>
                 {savedTemplates.length > 0 && (
                   <Badge variant="secondary" className="text-[9px]">{savedTemplates.length}</Badge>
@@ -194,10 +194,10 @@ export default function Pdf2SheetPage() {
             </div>
 
             {/* History */}
-            <div className="bg-white border rounded-xl flex flex-col flex-1 min-h-0">
-              <div className="flex items-center gap-2 px-4 py-2.5 border-b shrink-0">
+            <div className="bg-white border border-slate-200 rounded-lg shadow-sm flex flex-col flex-1 min-h-0">
+              <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 border-b border-slate-100 shrink-0">
                 <Clock className="h-4 w-4 text-slate-400" />
-                <span className="text-xs font-semibold text-slate-700">History</span>
+                <span className="text-xs font-mono font-semibold uppercase tracking-wide text-slate-700">History</span>
                 {recentConversions.length > 0 && (
                   <Badge variant="secondary" className="text-[9px]">{recentConversions.length}</Badge>
                 )}
@@ -277,14 +277,14 @@ export default function Pdf2SheetPage() {
                 <span className="font-medium">{selectedTemplate.supplierName}</span>
               </div>
             )}
-            <div className="border rounded-lg overflow-hidden max-h-[400px] overflow-y-auto">
+            <div className="border border-slate-200 rounded-lg shadow-sm overflow-hidden max-h-[400px] overflow-y-auto">
               <table className="w-full text-sm">
-                <thead className="bg-slate-50 sticky top-0">
+                <thead className="bg-slate-50 border-b border-slate-100 sticky top-0">
                   <tr>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 w-8">#</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Column</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 w-20">Type</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Example</th>
+                    <th className="px-3 py-2 text-left text-xs font-mono font-medium uppercase tracking-wide text-slate-500 w-8">#</th>
+                    <th className="px-3 py-2 text-left text-xs font-mono font-medium uppercase tracking-wide text-slate-500">Column</th>
+                    <th className="px-3 py-2 text-left text-xs font-mono font-medium uppercase tracking-wide text-slate-500 w-20">Type</th>
+                    <th className="px-3 py-2 text-left text-xs font-mono font-medium uppercase tracking-wide text-slate-500">Example</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -349,9 +349,9 @@ export default function Pdf2SheetPage() {
             </div>
 
             <div className="grid grid-cols-2 gap-4 flex-1 min-h-0">
-              <div className="border rounded-lg overflow-hidden flex flex-col">
-                <div className="px-3 py-2 border-b bg-slate-50">
-                  <span className="text-xs font-medium text-slate-600">Original Document</span>
+              <div className="border border-slate-200 rounded-lg shadow-sm overflow-hidden flex flex-col">
+                <div className="px-3 py-2 bg-slate-50 border-b border-slate-100">
+                  <span className="text-xs font-mono font-medium uppercase tracking-wide text-slate-600">Original Document</span>
                 </div>
                 <div className="flex-1 bg-slate-100">
                   {selectedConversion?.fileUrl ? (
@@ -362,9 +362,9 @@ export default function Pdf2SheetPage() {
                 </div>
               </div>
 
-              <div className="border rounded-lg overflow-hidden flex flex-col">
-                <div className="px-3 py-2 border-b bg-slate-50 flex items-center justify-between">
-                  <span className="text-xs font-medium text-slate-600">
+              <div className="border border-slate-200 rounded-lg shadow-sm overflow-hidden flex flex-col">
+                <div className="px-3 py-2 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                  <span className="text-xs font-mono font-medium uppercase tracking-wide text-slate-600">
                     Extracted Data ({selectedConversion?.extractedData?.length || 0} rows)
                   </span>
                   {selectedConversion?.extractedData && selectedConversion.extractedData.length > 0 && (
@@ -386,10 +386,10 @@ export default function Pdf2SheetPage() {
                 <div className="flex-1 overflow-auto">
                   {selectedConversion?.extractedData && selectedConversion.extractedData.length > 0 ? (
                     <table className="w-full text-xs">
-                      <thead className="bg-slate-50 sticky top-0">
+                      <thead className="bg-slate-50 border-b border-slate-100 sticky top-0">
                         <tr>
                           {selectedConversion.headers?.map((h, i) => (
-                            <th key={i} className="px-2 py-1.5 text-left font-medium text-slate-500 whitespace-nowrap">{h.name}</th>
+                            <th key={i} className="px-2 py-1.5 text-left font-mono font-medium uppercase tracking-wide text-slate-500 whitespace-nowrap">{h.name}</th>
                           ))}
                         </tr>
                       </thead>

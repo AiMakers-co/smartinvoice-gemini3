@@ -150,7 +150,7 @@ function AccountCard({ account, recentActivity, reconStats, isProcessing, proces
 
   return (
     <div
-      className={`border rounded-xl bg-white hover:border-slate-300 transition-all cursor-pointer group ${isProcessing ? 'border-cyan-300 bg-cyan-50/30' : 'border-slate-200'}`}
+      className={`border rounded-lg shadow-sm bg-white hover:border-slate-300 transition-all cursor-pointer group ${isProcessing ? 'border-cyan-300 bg-cyan-50/30' : 'border-slate-200'}`}
       onClick={onSelect}
     >
       <div className="p-4">
@@ -158,7 +158,7 @@ function AccountCard({ account, recentActivity, reconStats, isProcessing, proces
         {isProcessing && (
           <div className="flex items-center gap-2 mb-3 px-2.5 py-1.5 bg-cyan-50 border border-cyan-200 rounded-lg">
             <Loader2 className="h-3 w-3 text-cyan-600 animate-spin" />
-            <span className="text-[10px] font-medium text-cyan-700">
+            <span className="text-[10px] font-mono font-medium text-cyan-700">
               Importing transactions from {processingCount} statement{processingCount !== 1 ? 's' : ''}...
             </span>
           </div>
@@ -170,7 +170,7 @@ function AccountCard({ account, recentActivity, reconStats, isProcessing, proces
             <Icon className="h-5 w-5" />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="text-sm font-semibold text-slate-900 truncate">{account.accountNickname}</h3>
+            <h3 className="text-sm font-semibold font-mono text-slate-900 truncate">{account.accountNickname}</h3>
             <p className="text-xs text-slate-500">{account.bankName} &middot; ****{account.accountNumber?.slice(-4)}</p>
           </div>
           <DropdownMenu>
@@ -199,24 +199,24 @@ function AccountCard({ account, recentActivity, reconStats, isProcessing, proces
 
         {/* Balance */}
         <div className="mb-3">
-          <p className="text-xs text-slate-500 mb-0.5">Balance</p>
-          <p className="text-lg font-semibold text-slate-900">{formatCurrency(account.balance)}</p>
+          <p className="text-[10px] font-mono uppercase tracking-wide text-slate-500 mb-0.5">Balance</p>
+          <p className="text-lg font-semibold font-mono text-slate-900">{formatCurrency(account.balance)}</p>
         </div>
 
         {/* Stats row */}
-        <div className="flex items-center gap-4 text-xs text-slate-500">
+        <div className="flex items-center gap-4 text-xs font-mono text-slate-500">
           <span>{account.statementCount || 0} stmt</span>
           <span>&middot;</span>
           <span>{account.transactionCount || 0} txn</span>
-          <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-medium">{account.currency || "USD"}</span>
+          <span className="ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-50 border border-slate-200 text-slate-600 font-medium">{account.currency || "USD"}</span>
         </div>
 
         {/* Reconciliation status */}
         {reconStats && reconStats.total > 0 && (
           <div className="mt-3 pt-3 border-t border-slate-100">
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[10px] text-slate-500">Reconciliation</span>
-              <span className="text-[10px] font-semibold text-slate-700">
+              <span className="text-[10px] font-mono uppercase tracking-wide text-slate-500">Reconciliation</span>
+              <span className="text-[10px] font-mono font-semibold text-slate-700">
                 {Math.round((reconStats.matched / reconStats.total) * 100)}%
               </span>
             </div>
@@ -227,9 +227,9 @@ function AccountCard({ account, recentActivity, reconStats, isProcessing, proces
               />
             </div>
             <div className="flex items-center gap-3 mt-1.5 text-[10px]">
-              <span className="text-emerald-600">{reconStats.matched} matched</span>
+              <span className="font-mono text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">{reconStats.matched} matched</span>
               {reconStats.unmatched > 0 && (
-                <span className="text-amber-500">{reconStats.unmatched} pending</span>
+                <span className="font-mono text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">{reconStats.unmatched} pending</span>
               )}
             </div>
           </div>
@@ -238,9 +238,9 @@ function AccountCard({ account, recentActivity, reconStats, isProcessing, proces
 
       {/* Footer with activity */}
       {recentActivity?.monthlyChange && (recentActivity.monthlyChange.credits > 0 || recentActivity.monthlyChange.debits > 0) && (
-        <div className="flex items-center gap-3 px-4 py-2.5 border-t border-slate-100 text-xs">
-          <span className="text-emerald-600 font-medium">+{formatCurrency(recentActivity.monthlyChange.credits)}</span>
-          <span className="text-red-500 font-medium">&minus;{formatCurrency(recentActivity.monthlyChange.debits)}</span>
+        <div className="flex items-center gap-3 px-4 py-2.5 bg-slate-50 border-t border-slate-100 text-xs">
+          <span className="text-emerald-600 font-mono font-medium">+{formatCurrency(recentActivity.monthlyChange.credits)}</span>
+          <span className="text-red-500 font-mono font-medium">&minus;{formatCurrency(recentActivity.monthlyChange.debits)}</span>
           <span className="text-slate-400 ml-auto text-[10px]">{formatDate(account.lastStatementDate)}</span>
         </div>
       )}
@@ -490,7 +490,7 @@ function InlineUpload({ accounts, userId, onUploadComplete, preSelectedAccountId
       {/* Drop Zone */}
       <div
         className={`
-          relative border-2 border-dashed rounded-xl p-6 transition-all cursor-pointer
+          relative border-2 border-dashed rounded-lg p-6 transition-all cursor-pointer
           ${isDragging ? "border-cyan-500 bg-cyan-50" : "border-slate-200 hover:border-slate-300 bg-white"}
         `}
         onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
@@ -509,17 +509,17 @@ function InlineUpload({ accounts, userId, onUploadComplete, preSelectedAccountId
         
         <div className="flex items-center gap-4">
           <div className={`
-            h-12 w-12 rounded-xl flex items-center justify-center transition-colors
+            h-12 w-12 rounded-lg flex items-center justify-center transition-colors
             ${isDragging ? "bg-cyan-500 text-white" : "bg-slate-100 text-slate-500"}
           `}>
             <Upload className="h-6 w-6" />
           </div>
           <div className="flex-1">
-            <p className="text-sm font-medium text-slate-900">
+            <p className="text-sm font-medium font-mono text-slate-900">
               {isDragging ? "Drop files now" : "Drop bank statements here"}
             </p>
             <p className="text-xs text-slate-500">
-              PDF, PNG, JPG, CSV, Excel • Max 50MB
+              PDF, PNG, JPG, CSV, Excel -- Max 50MB
             </p>
             </div>
           <Button variant="outline" size="sm" className="shrink-0">
@@ -532,7 +532,7 @@ function InlineUpload({ accounts, userId, onUploadComplete, preSelectedAccountId
       {activeFiles.length > 0 && (
         <div className="space-y-2">
           {activeFiles.map(f => (
-            <div key={f.id} className="flex items-center gap-3 p-3 bg-white border rounded-lg">
+            <div key={f.id} className="flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-lg shadow-sm">
               <div className="h-8 w-8 rounded bg-slate-100 flex items-center justify-center shrink-0">
                 <FileText className="h-4 w-4 text-slate-500" />
                 </div>
@@ -594,7 +594,7 @@ function EmptyState({ onUpload }: EmptyStateProps) {
       {/* Header Row */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900">Bank Accounts</h2>
+          <h2 className="text-lg font-semibold font-mono tracking-wide text-slate-900">BANK ACCOUNTS</h2>
           <p className="text-xs text-slate-500">Connect and manage your bank accounts</p>
       </div>
         <Button onClick={onUpload} className="bg-cyan-600 hover:bg-cyan-700">
@@ -604,7 +604,7 @@ function EmptyState({ onUpload }: EmptyStateProps) {
       </div>
 
       {/* Summary Bar */}
-      <div className="bg-white border rounded-lg">
+      <div className="bg-white border border-slate-200 rounded-lg shadow-sm">
         <div className="flex items-center divide-x">
           <div className="px-3 py-2">
             <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium">Total</div>
@@ -626,7 +626,7 @@ function EmptyState({ onUpload }: EmptyStateProps) {
       </div>
       
       {/* Empty Content */}
-      <Card>
+      <Card className="bg-white border border-slate-200 rounded-lg shadow-sm">
         <CardContent className="p-8 text-center">
           <div className="h-12 w-12 rounded-full bg-cyan-50 flex items-center justify-center mx-auto mb-3">
             <Building2 className="h-6 w-6 text-cyan-600" />
@@ -982,7 +982,7 @@ export default function AccountsPage() {
         {loading ? (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {[1, 2, 3].map(i => (
-              <Card key={i} className="animate-pulse">
+              <Card key={i} className="animate-pulse bg-white border border-slate-200 rounded-lg shadow-sm">
                 <CardContent className="p-4">
                   <div className="h-10 w-10 rounded-lg bg-slate-200 mb-4" />
                   <div className="h-6 w-32 bg-slate-200 rounded mb-2" />
@@ -998,7 +998,7 @@ export default function AccountsPage() {
             {/* Header Row */}
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-slate-900">Your Accounts</h2>
+                <h2 className="text-lg font-semibold font-mono tracking-wide text-slate-900">YOUR ACCOUNTS</h2>
                 <p className="text-sm text-slate-500">{accounts.length} account{accounts.length !== 1 ? 's' : ''} connected</p>
               </div>
               <Button 
@@ -1012,28 +1012,28 @@ export default function AccountsPage() {
 
             {/* Summary Cards */}
             <div className="grid grid-cols-6 gap-3">
-              <div className="border border-slate-200 rounded-xl px-4 py-3">
-                <p className="text-xs text-slate-500">Accounts</p>
-                <p className="text-xl font-semibold text-slate-900 mt-1">{accounts.length}</p>
+              <div className="bg-white border border-slate-200 rounded-lg shadow-sm px-4 py-3">
+                <p className="text-[10px] font-mono uppercase tracking-wide text-slate-500">Accounts</p>
+                <p className="text-xl font-semibold font-mono text-slate-900 mt-1">{accounts.length}</p>
               </div>
               {Object.entries(balancesByCurrency).map(([currency, balance]) => (
-                <div key={currency} className="border border-slate-200 rounded-xl px-4 py-3">
-                  <p className="text-xs text-slate-500">{currency} Balance</p>
-                  <p className="text-xl font-semibold text-slate-900 mt-1">{formatCurrencyTotal(balance, currency)}</p>
+                <div key={currency} className="bg-white border border-slate-200 rounded-lg shadow-sm px-4 py-3">
+                  <p className="text-[10px] font-mono uppercase tracking-wide text-slate-500">{currency} Balance</p>
+                  <p className="text-xl font-semibold font-mono text-slate-900 mt-1">{formatCurrencyTotal(balance, currency)}</p>
                 </div>
               ))}
-              <div className="border border-slate-200 rounded-xl px-4 py-3">
-                <p className="text-xs text-slate-500">Statements</p>
-                <p className="text-xl font-semibold text-slate-900 mt-1">{totalStatements}</p>
+              <div className="bg-white border border-slate-200 rounded-lg shadow-sm px-4 py-3">
+                <p className="text-[10px] font-mono uppercase tracking-wide text-slate-500">Statements</p>
+                <p className="text-xl font-semibold font-mono text-slate-900 mt-1">{totalStatements}</p>
               </div>
-              <div className="border border-slate-200 rounded-xl px-4 py-3">
-                <p className="text-xs text-slate-500">Transactions</p>
-                <p className="text-xl font-semibold text-slate-900 mt-1">{totalTransactions.toLocaleString()}</p>
+              <div className="bg-white border border-slate-200 rounded-lg shadow-sm px-4 py-3">
+                <p className="text-[10px] font-mono uppercase tracking-wide text-slate-500">Transactions</p>
+                <p className="text-xl font-semibold font-mono text-slate-900 mt-1">{totalTransactions.toLocaleString()}</p>
                 <p className="text-[10px] text-emerald-600 font-medium mt-0.5">AI extracted</p>
               </div>
-              <div className="border border-slate-200 rounded-xl px-4 py-3">
-                <p className="text-xs text-slate-500">Reconciled</p>
-                <p className="text-xl font-semibold text-slate-900 mt-1">
+              <div className="bg-white border border-slate-200 rounded-lg shadow-sm px-4 py-3">
+                <p className="text-[10px] font-mono uppercase tracking-wide text-slate-500">Reconciled</p>
+                <p className="text-xl font-semibold font-mono text-slate-900 mt-1">
                   {(() => {
                     const allStats = Object.values(accountReconStats);
                     const totalM = allStats.reduce((s, r) => s + r.matched, 0);
@@ -1114,9 +1114,9 @@ export default function AccountsPage() {
       <Dialog open={!!editingAccount} onOpenChange={(open) => !open && setEditingAccount(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+            <DialogTitle className="flex items-center gap-2 font-mono tracking-wide">
               <Edit2 className="h-5 w-5" />
-              Edit Account
+              EDIT ACCOUNT
             </DialogTitle>
             <DialogDescription>
               Update the account details below. Changes will be saved immediately.
@@ -1195,7 +1195,7 @@ export default function AccountsPage() {
             {/* Merge with another account */}
             {accounts.filter(a => a.id !== editingAccount?.id).length > 0 && (
               <div className="pt-4 border-t space-y-2">
-                <Label className="text-amber-700">Merge Into Another Account</Label>
+                <Label className="text-amber-700 font-mono tracking-wide uppercase">Merge Into Another Account</Label>
                 <p className="text-xs text-slate-500">
                   Move all statements and transactions to a different account
                 </p>
@@ -1266,7 +1266,7 @@ export default function AccountsPage() {
       <Dialog open={confirmDialog.open} onOpenChange={(open) => !open && setConfirmDialog(prev => ({ ...prev, open: false }))}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+            <DialogTitle className="flex items-center gap-2 font-mono tracking-wide">
               <AlertTriangle className="h-5 w-5 text-amber-500" />
               {confirmDialog.title}
             </DialogTitle>

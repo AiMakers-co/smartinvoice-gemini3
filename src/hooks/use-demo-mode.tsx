@@ -2,9 +2,12 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 
-// Demo account identifiers - must match seed script
+// Master demo account identifiers - must match seed script
 export const DEMO_USER_ID = "demo_coastal_creative_agency";
 export const DEMO_ORG_ID = "demo_org_coastal_creative";
+
+const DEMO_MODE_KEY = "smartinvoice_demo_mode";
+const DEMO_SESSION_KEY = "smartinvoice_demo_session_id";
 
 interface DemoModeContextType {
   isDemoMode: boolean;
@@ -16,10 +19,9 @@ interface DemoModeContextType {
 
 const DemoModeContext = createContext<DemoModeContextType | undefined>(undefined);
 
-const DEMO_MODE_KEY = "smartinvoice_demo_mode";
-
 export function DemoModeProvider({ children }: { children: ReactNode }) {
   const [isDemoMode, setIsDemoMode] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
 
   // Load demo mode state from localStorage on mount
@@ -28,6 +30,10 @@ export function DemoModeProvider({ children }: { children: ReactNode }) {
     const stored = localStorage.getItem(DEMO_MODE_KEY);
     if (stored === "true") {
       setIsDemoMode(true);
+    }
+    const storedSession = localStorage.getItem(DEMO_SESSION_KEY);
+    if (storedSession) {
+      setSessionId(storedSession);
     }
   }, []);
 
@@ -46,13 +52,17 @@ export function DemoModeProvider({ children }: { children: ReactNode }) {
     setIsDemoMode(value);
   };
 
+  // Session-aware demo userId
+  const demoUserId = sessionId ? `demo_${sessionId}` : DEMO_USER_ID;
+  const demoOrgId = sessionId ? `demo_org_${sessionId}` : DEMO_ORG_ID;
+
   return (
-    <DemoModeContext.Provider value={{ 
-      isDemoMode, 
-      toggleDemoMode, 
+    <DemoModeContext.Provider value={{
+      isDemoMode,
+      toggleDemoMode,
       setDemoMode,
-      demoUserId: DEMO_USER_ID,
-      demoOrgId: DEMO_ORG_ID,
+      demoUserId,
+      demoOrgId,
     }}>
       {children}
     </DemoModeContext.Provider>

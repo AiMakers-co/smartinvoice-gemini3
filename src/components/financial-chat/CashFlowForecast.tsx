@@ -181,6 +181,7 @@ export function CashFlowForecast() {
           matchRate,
           patternsLearned: patternsSnap.size,
         },
+        effectiveUserId: user.id,
       });
 
       const data = res.data as ForecastResult;

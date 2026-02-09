@@ -389,7 +389,7 @@ function ReasoningDrawer({
               {/* Pipeline Steps */}
               {result.steps.length > 0 && (
                 <div className="mt-3 pt-3 border-t border-slate-100">
-                  <div className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-2">Pipeline</div>
+                  <div className="text-[10px] text-slate-500 font-mono uppercase tracking-wider font-semibold mb-2">Pipeline</div>
                   <div className="space-y-1">
                     {result.steps.map((step, i) => (
                       <div key={i} className={cn(
@@ -450,61 +450,61 @@ function StatsCards({
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-      <Card className="border-orange-200 bg-orange-50/50">
+      <Card className="bg-white border border-slate-200 rounded-lg shadow-sm">
         <CardContent className="p-4">
           <div className="flex items-center gap-2 mb-2">
-            <div className="h-8 w-8 rounded-lg bg-orange-100 flex items-center justify-center">
-              <Clock className="h-4 w-4 text-orange-600" />
+            <div className="h-8 w-8 rounded-lg bg-orange-50 flex items-center justify-center">
+              <Clock className="h-4 w-4 text-orange-500" />
             </div>
-            <div className="text-xs text-orange-600 font-medium">Unmatched</div>
+            <div className="text-xs text-orange-600 font-mono font-medium uppercase tracking-wide">Unmatched</div>
           </div>
-          <div className="text-2xl font-bold text-orange-700">{unmatched.length}</div>
-          <div className="text-xs text-orange-600">need matching</div>
+          <div className="text-2xl font-bold text-orange-600">{unmatched.length}</div>
+          <div className="text-xs text-orange-500">need matching</div>
         </CardContent>
       </Card>
 
-      <Card className="border-purple-200 bg-purple-50/50">
+      <Card className="bg-white border border-slate-200 rounded-lg shadow-sm">
         <CardContent className="p-4">
           <div className="flex items-center gap-2 mb-2">
-            <div className="h-8 w-8 rounded-lg bg-purple-100 flex items-center justify-center">
-              <Sparkles className="h-4 w-4 text-purple-600" />
+            <div className="h-8 w-8 rounded-lg bg-purple-50 flex items-center justify-center">
+              <Sparkles className="h-4 w-4 text-purple-500" />
             </div>
-            <div className="text-xs text-purple-600 font-medium">Suggested</div>
+            <div className="text-xs text-purple-600 font-mono font-medium uppercase tracking-wide">Suggested</div>
           </div>
-          <div className="text-2xl font-bold text-purple-700">{suggested.length}</div>
-          <div className="text-xs text-purple-600">to review</div>
+          <div className="text-2xl font-bold text-purple-600">{suggested.length}</div>
+          <div className="text-xs text-purple-500">to review</div>
         </CardContent>
       </Card>
 
-      <Card className="border-emerald-200 bg-emerald-50/50">
+      <Card className="bg-white border border-slate-200 rounded-lg shadow-sm">
         <CardContent className="p-4">
           <div className="flex items-center gap-2 mb-2">
-            <div className="h-8 w-8 rounded-lg bg-emerald-100 flex items-center justify-center">
-              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+            <div className="h-8 w-8 rounded-lg bg-emerald-50 flex items-center justify-center">
+              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
             </div>
-            <div className="text-xs text-emerald-600 font-medium">Matched</div>
+            <div className="text-xs text-emerald-600 font-mono font-medium uppercase tracking-wide">Matched</div>
           </div>
-          <div className="text-2xl font-bold text-emerald-700">{matched.length}</div>
-          <div className="text-xs text-emerald-600">reconciled</div>
+          <div className="text-2xl font-bold text-emerald-600">{matched.length}</div>
+          <div className="text-xs text-emerald-500">reconciled</div>
         </CardContent>
       </Card>
 
-      <Card className="border-slate-200 bg-slate-50/50">
+      <Card className="bg-white border border-slate-200 rounded-lg shadow-sm">
         <CardContent className="p-4">
           <div className="flex items-center gap-2 mb-2">
-            <div className="h-8 w-8 rounded-lg bg-slate-100 flex items-center justify-center">
-              <DollarSign className="h-4 w-4 text-slate-500" />
+            <div className="h-8 w-8 rounded-lg bg-slate-50 flex items-center justify-center">
+              <DollarSign className="h-4 w-4 text-slate-400" />
             </div>
-            <div className="text-xs text-slate-500 font-medium">Bank Fees</div>
+            <div className="text-xs text-slate-500 font-mono font-medium uppercase tracking-wide">Bank Fees</div>
           </div>
           <div className="text-2xl font-bold text-slate-600">{bankFees.length}</div>
           <div className="text-xs text-slate-500">identified</div>
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="bg-white border border-slate-200 rounded-lg shadow-sm">
         <CardContent className="p-4">
-          <div className="text-xs text-slate-600 font-medium mb-2">Match Rate</div>
+          <div className="text-xs text-slate-600 font-mono font-medium uppercase tracking-wide mb-2">Match Rate</div>
           <div className="text-2xl font-bold">{progress}%</div>
           <Progress value={progress} className="h-2 mt-2" />
           <div className="text-[10px] text-slate-500 mt-1">
@@ -789,8 +789,8 @@ function ConfirmMatchModal({
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="p-4 rounded-lg bg-slate-50 border">
-            <div className="text-xs text-slate-500 uppercase tracking-wider mb-2">Transaction</div>
+          <div className="p-4 rounded-lg bg-white border border-slate-200 shadow-sm">
+            <div className="text-xs text-slate-500 font-mono uppercase tracking-wider mb-2">Transaction</div>
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-medium">{transaction.description}</p>
@@ -808,8 +808,8 @@ function ConfirmMatchModal({
             </div>
           </div>
 
-          <div className="p-4 rounded-lg bg-slate-50 border">
-            <div className="text-xs text-slate-500 uppercase tracking-wider mb-2">
+          <div className="p-4 rounded-lg bg-white border border-slate-200 shadow-sm">
+            <div className="text-xs text-slate-500 font-mono uppercase tracking-wider mb-2">
               {match.documentType === "invoice" ? "Invoice" : "Bill"}
             </div>
             <div className="flex items-center justify-between">
@@ -824,10 +824,10 @@ function ConfirmMatchModal({
           </div>
 
           {match.fxDetails && (
-            <div className="p-3 rounded-lg bg-purple-50 border border-purple-200">
-              <div className="flex items-center gap-2 text-sm text-purple-700">
+            <div className="p-3 rounded-lg bg-white border border-purple-200 shadow-sm">
+              <div className="flex items-center gap-2 text-sm text-purple-600">
                 <RefreshCw className="h-4 w-4" />
-                <span className="font-medium">Currency Conversion</span>
+                <span className="font-mono font-medium uppercase tracking-wide text-xs">Currency Conversion</span>
               </div>
               <div className="text-sm text-purple-600 mt-1">
                 {formatCurrency(Math.abs(transaction.amount), match.fxDetails.fromCurrency)}
@@ -838,8 +838,8 @@ function ConfirmMatchModal({
           )}
 
           {match.reasoning.length > 0 && (
-            <div className="p-3 rounded-lg bg-indigo-50 border border-indigo-200">
-              <p className="text-xs font-medium text-indigo-700 flex items-center gap-1.5 mb-1.5">
+            <div className="p-3 rounded-lg bg-white border border-indigo-200 shadow-sm">
+              <p className="text-xs font-mono font-medium text-indigo-600 uppercase tracking-wide flex items-center gap-1.5 mb-1.5">
                 <Brain className="h-3.5 w-3.5" /> AI Reasoning
               </p>
               <div className="space-y-0.5">
@@ -1065,6 +1065,7 @@ export default function ReconciliationPage() {
           cursor,
           batchNumber,
           accumulatedStats,
+          effectiveUserId: user.id,
         });
 
         const data = result.data as ReconcileResult & {
@@ -1168,6 +1169,7 @@ export default function ReconciliationPage() {
         matchConfidence: selectedTransaction.match.confidence,
         matchMethod: `ai_${selectedTransaction.match.thinkingLevel}`,
         fxRate: selectedTransaction.match.fxDetails?.rate,
+        effectiveUserId: user?.id,
       };
       // For combined matches, send all documents
       if (selectedTransaction.match.combinedDocuments?.length) {
@@ -1237,6 +1239,7 @@ export default function ReconciliationPage() {
             matchConfidence: tx.match!.confidence,
             matchMethod: `ai_${tx.match!.thinkingLevel}`,
             fxRate: tx.match!.fxDetails?.rate,
+            effectiveUserId: user?.id,
           };
           if (tx.match!.combinedDocuments?.length) {
             payload.combinedDocuments = tx.match!.combinedDocuments;
@@ -1268,7 +1271,7 @@ export default function ReconciliationPage() {
     if (!user?.id) return;
     try {
       const categorize = httpsCallable(functions, "categorizeTransactionV2");
-      await categorize({ transactionId: txId, category: "other" });
+      await categorize({ transactionId: txId, category: "other", effectiveUserId: user.id });
       setTransactions(prev => prev.map(tx =>
         tx.id === txId ? { ...tx, reconciliationStatus: "categorized" as any } : tx
       ));
@@ -1337,10 +1340,10 @@ export default function ReconciliationPage() {
 
         {/* Warning: No documents to match against */}
         {transactions.length > 0 && bills.length === 0 && invoices.length === 0 && !isReconciling && (
-          <div className="flex items-start gap-3 p-4 rounded-xl border border-amber-200 bg-amber-50">
-            <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="flex items-start gap-3 p-4 rounded-lg border border-amber-200 bg-white shadow-sm">
+            <AlertCircle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
             <div className="flex-1">
-              <h4 className="text-sm font-semibold text-amber-900">No invoices or bills uploaded</h4>
+              <h4 className="text-sm font-mono font-semibold text-amber-800 uppercase tracking-wide">No invoices or bills uploaded</h4>
               <p className="text-xs text-amber-700 mt-0.5">
                 AI found invoice references in your bank statements but can't match them to actual documents. 
                 Upload your invoices and bills to enable full automatic matching.
@@ -1369,7 +1372,7 @@ export default function ReconciliationPage() {
 
         {/* Compact results bar */}
         {!isReconciling && pipelineResult && (
-          <div className="flex items-center gap-4 px-4 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-xs">
+          <div className="flex items-center gap-4 px-4 py-2.5 rounded-lg border border-slate-200 bg-white shadow-sm text-xs">
             <div className="flex items-center gap-2">
               <Brain className="h-4 w-4 text-purple-600" />
               <span className="font-semibold text-slate-900">{pipelineResult.stats.matchRate}% matched</span>
@@ -1517,10 +1520,10 @@ export default function ReconciliationPage() {
         </div>
 
         {/* Transaction List */}
-        <Card>
+        <Card className="bg-white border border-slate-200 rounded-lg shadow-sm">
           {/* Table header */}
           {filteredTransactions.length > 0 && (
-            <div className="flex items-center gap-2 px-4 py-2 border-b border-slate-200 bg-slate-50 text-[10px] font-medium text-slate-400 uppercase tracking-wider">
+            <div className="flex items-center gap-2 px-4 py-2 border-b border-slate-100 bg-slate-50 text-[10px] font-mono font-medium text-slate-400 uppercase tracking-wider">
               <div className="flex items-center gap-2 flex-1 min-w-0">
                 <span className="w-6 shrink-0" />
                 <span className="w-[68px] shrink-0">Date</span>
@@ -1591,7 +1594,7 @@ export default function ReconciliationPage() {
         </Card>
 
         {/* Footer */}
-        <div className="flex items-center justify-between text-xs text-slate-500">
+        <div className="flex items-center justify-between text-xs font-mono text-slate-400">
           <span>{filteredTransactions.length} {activeTab} transactions</span>
           <div className="flex items-center gap-4">
             <span>{bills.length} bills</span>

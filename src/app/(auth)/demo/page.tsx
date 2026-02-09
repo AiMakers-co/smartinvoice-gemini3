@@ -4,12 +4,25 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Sparkles } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { cloneDemoData } from "@/lib/demo-clone";
+
+const SESSION_KEY = "smartinvoice_demo_session_id";
+
+function generateSessionId(): string {
+  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+  let id = "";
+  for (let i = 0; i < 8; i++) {
+    id += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return id;
+}
 
 export default function DemoPage() {
   const router = useRouter();
   const { signInAsGuest, user, loading } = useAuth();
   const [error, setError] = useState("");
   const [started, setStarted] = useState(false);
+  const [status, setStatus] = useState("Preparing demo...");
 
   useEffect(() => {
     // If already logged in with demo mode, redirect
@@ -20,14 +33,31 @@ export default function DemoPage() {
 
     if (!loading && !user && !started) {
       setStarted(true);
-      signInAsGuest()
-        .then(() => {
+
+      (async () => {
+        try {
+          // Check for existing session (returning user)
+          let sessionId = localStorage.getItem(SESSION_KEY);
+
+          if (!sessionId) {
+            // New demo session — clone data
+            sessionId = generateSessionId();
+            localStorage.setItem(SESSION_KEY, sessionId);
+
+            setStatus("Creating your demo environment...");
+            await cloneDemoData(sessionId);
+          }
+
+          setStatus("Signing in...");
+          await signInAsGuest();
           router.replace("/dashboard");
-        })
-        .catch((err: any) => {
-          console.error("Demo sign-in error:", err);
+        } catch (err: any) {
+          console.error("Demo setup error:", err);
+          // Clear session on failure so retry creates a fresh one
+          localStorage.removeItem(SESSION_KEY);
           setError(err.message || "Failed to start demo. Please try again.");
-        });
+        }
+      })();
     }
   }, [loading, user, started, signInAsGuest, router]);
 
@@ -57,7 +87,7 @@ export default function DemoPage() {
               )}
             </div>
             <div>
-              <p className="text-sm font-medium text-slate-900">Loading demo environment...</p>
+              <p className="text-sm font-medium text-slate-900">{status}</p>
               <p className="text-xs text-slate-500 mt-1">Setting up sample data for you</p>
             </div>
           </div>
